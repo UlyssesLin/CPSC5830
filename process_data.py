@@ -61,7 +61,10 @@ NUM_E_TYPE = 3
 events = (events
           .assign(u = lambda _d: _d['u'].map(lambda x: u_dict[x]))
           .assign(v = lambda _d: _d['v'].map(lambda x: v_dict[x]))
+          .assign(e_type = lambda _d: _d['e_type'] + 1)
           .assign(e_idx = np.arange(1, NUM_EV + 1)))
+
+events.v += NUM_N_U
 
 print("num node:", NUM_NODE)
 print("num events:", NUM_EV)

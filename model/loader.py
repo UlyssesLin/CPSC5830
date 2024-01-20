@@ -14,8 +14,8 @@ class MiniBatchSampler(object):
 
         idx_list = np.arange(len(e_idx_l))
 
-        pos_mask = e_type_l == 1
-        neg_mask = e_type_l == 0
+        pos_mask = e_type_l == 2
+        neg_mask = e_type_l == 1
         self.pos_idx = idx_list[pos_mask]
         self.neg_idx = idx_list[neg_mask]
 
@@ -28,7 +28,7 @@ class MiniBatchSampler(object):
         batch_size = self.pos_bs + self.neg_bs
         self.num_batch = math.ceil(num_inst / batch_size)
         logger = logging.getLogger(self.__class__.__name__)
-        logger.info(f'num of {hint} instances: {num_inst}')
+        logger.info(f'num of {hint} instances: {num_inst} (pos: {pos_inst}, neg: {neg_inst})')
         logger.info(f'num of batches per epoch: {self.num_batch}')
         logger.info(f'batch size: {batch_size}')
         self.cur_batch = 0

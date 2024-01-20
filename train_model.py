@@ -140,7 +140,7 @@ for i in range(args.n_runs):
             neg_ts_l_cut = train.ts_l[neg_batch]
             neg_src_utype_l = train.u_type_l[neg_batch]
             neg_tgt_utype_l = train.v_type_l[neg_batch]
-            neg_etype_l = train.e_type_l[neg_batch]
+            neg_etype_l = train.e_type_l[neg_batch] + 1
 
             pos_size = len(pos_batch)
             neg_size = len(neg_batch)
