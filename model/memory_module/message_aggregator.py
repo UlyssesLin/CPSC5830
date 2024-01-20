@@ -6,7 +6,8 @@ from collections import defaultdict
 
 class LastMessageAggregator(nn.Module):
     def __init__(self, device):
-        super().__init__(device)
+        super().__init__()
+        self.device = device
 
     def aggregate(self, node_ids, messages):
         """Only keep the last message for each node"""

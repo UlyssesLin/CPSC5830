@@ -12,7 +12,7 @@ class HetMatchDecoder(nn.Module):
         else:
             etype_feat = torch.from_numpy(etype_feat)
             self.fc1 = nn.Linear(dim*2 + etype_feat.shape[1], dim)
-        self.rel_emb = nn.Parameters(etype_feat)
+        self.rel_emb = nn.Parameter(etype_feat)
 
         self.fc2 = nn.Linear(dim, 1)
         self.act = nn.ReLU()
@@ -106,7 +106,7 @@ class MultiHeadAttention(nn.Module):
             self.w_ks.append(nn.Linear(self.d_r, n_head * d_k, bias=False))
             self.w_vs.append(nn.Linear(self.d_r, n_head * d_k, bias=False))
 
-        self.relation_pri = nn.Parameters(torch.ones(num_n_type + 1,
+        self.relation_pri = nn.Parameter(torch.ones(num_n_type + 1,
                                                      num_e_type + 1))
         
         self.attention = ScaledDotProductAttention(d_k**0.5,
@@ -180,7 +180,7 @@ class MultiHeadAttention(nn.Module):
         output, attn = self.attention(q, k, v, pri, mask=mask) # output (n*b) x dv
 
         output = output.view(n_head, sz_b, d_v) # n x b x dv
-        output = output.transpose(0, 1).contiduous().view(sz_b, -1) # b x (n*dv) = b x d_model
+        output = output.transpose(0, 1).contiguous().view(sz_b, -1) # b x (n*dv) = b x d_model
 
         # map out to q's feature space
         out = torch.zeros_like(output)
@@ -231,7 +231,7 @@ class Transfer(nn.Module):
                                                            padding_idx=0)
         else:
             self.edge_trans = nn.Embedding(num_e_type+1, e_dim, padding_idx=0)
-        self.e_dim = self.edge_trans_weight.size(1)
+        self.e_dim = self.edge_trans.weight.size(1)
 
     def forward(self, src, nghs, seq_utype, seq_vtype, seq_etype):
         """
@@ -340,7 +340,7 @@ class AttnModel(nn.Module):
         output, attn = self.multi_head_target(q=q, k=k, v=k,
                                               seq_etype=seq_etype,
                                               seq_utype=seq_utype,
-                                              seq_vtype=seq_vtype, mask=mask)
+                                              mask=mask)
         
         # residual
         output = self.merger(output, src)
