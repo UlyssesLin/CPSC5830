@@ -100,7 +100,7 @@ train_batch_sampler = MiniBatchSampler(train.e_idx_l, train.e_type_l, BATCH_SIZE
 test_batch_sampler = MiniBatchSampler(test.e_idx_l, test.e_type_l, BATCH_SIZE, 'test')
 
 
-device = torch.device('cuda:{}'.format(GPU))
+device = torch.device('cuda:{}'.format(GPU)) if GPU != -1 else 'cpu'
 
 auc_l, ap_l = [], []
 for i in range(args.n_runs):
