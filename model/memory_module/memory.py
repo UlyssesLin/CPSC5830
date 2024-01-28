@@ -76,5 +76,5 @@ class Memory(nn.Module):
       self.messages[node] = []
     self.msg_flag[nodes] = 0
 
-  def get_to_upate_nodes(self):
+  def get_to_update_nodes(self):
     return np.where(self.msg_flag == 1)[0]

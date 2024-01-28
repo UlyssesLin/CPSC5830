@@ -1,118 +1,66 @@
 import os
 import numpy as np
 import logging
-import torch
 import random
-import sys
-import argparse
 import pandas as pd
 import json
 import math
 import logging
-from graph import *
-
-# class RandHetEdgeSampler(object):
-#     def __init__(self, src_list, dst_list, utype_list, vtype_list):
-#         if isinstance(src_list, (list, tuple)):
-#             src_list = np.concatenate(src_list)
-#         if isinstance(dst_list, (list, tuple)):
-#             dst_list = np.concatenate(dst_list)
-#         if isinstance(utype_list, (list, tuple)):
-#             utype_list = np.concatenate(utype_list)
-#         if isinstance(vtype_list, (list, tuple)):
-#             vtype_list = np.concatenate(vtype_list)
-#         # src node
-#         src_data = {}
-#         utypes = np.unique(utype_list)
-#         for utype in utypes:
-#             idx_mask = utype_list==utype
-#             src_l = np.unique(src_list[idx_mask])
-#             src_data[utype] = src_l
-#         self.src_data = src_data
-#         # dst node
-#         dst_data = {}
-#         vtypes = np.unique(vtype_list)
-#         for vtype in vtypes:
-#             idx_mask = vtype_list==vtype
-#             dst_l = np.unique(dst_list[idx_mask])
-#             dst_data[vtype] = dst_l
-#         self.dst_data = dst_data
-
-#     def sample(self, size, utype, vtype):
-#         src_l = self.src_data[utype]
-#         dst_l = self.dst_data[vtype]
-#         src_index = np.random.randint(0, len(src_l), size)
-#         dst_index = np.random.randint(0, len(dst_l), size)
-#         return src_l[src_index], dst_l[dst_index]
-    
-#     def sample_dst(self, size, vtype):
-#         dst_l = self.dst_data[vtype]
-#         dst_index = np.random.randint(0, len(dst_l), size)
-#         return dst_l[dst_index]
-    
-#     def sample_dst_by_ntype_list(self, vtype_list):
-#         """ sample equal num dst neg node to vtype_list """
-#         vtype_cnt = {}
-#         for i, vtype in enumerate(vtype_list):
-#             val = vtype_cnt.get(vtype, {'cnt':0, 'idx':[]})
-#             val['cnt'] += 1
-#             val['idx'].append(i)
-#             vtype_cnt[vtype] = val
-
-#         dst_index = np.zeros(len(vtype_list), dtype='int64')
-#         for vtype, val in vtype_cnt.items():
-#             dst_idx = self.sample_dst(val['cnt'], vtype)
-#             dst_index[val['idx']] = dst_idx
-#         return dst_index
+from model.graph import *
 
 
 class MiniBatchSampler(object):
-    def __init__(self, num_inst, batch_size, shuffle=False, pad_percent=0, hint="train"):
-        """ padding the first i/10 events on ts, just use the other (10-i)/10 events for training """
-        assert 0<=pad_percent<10, "padd should be in [0, 10) "
-        self.padding = 0
-        if hint == 'train':
-            self.padding = pad_percent * num_inst // 10
+    def __init__(self, e_idx_l, e_type_l, batch_size, hint):
 
-        self.num_inst = num_inst
-        self.num_batch = math.ceil(self.num_inst / batch_size)
-        self.batch_size = batch_size
-        self.shuffle = shuffle
-        self.hint = hint
+        idx_list = np.arange(len(e_idx_l))
+
+        pos_mask = e_type_l == 2
+        neg_mask = e_type_l == 1
+        self.pos_idx = idx_list[pos_mask]
+        self.neg_idx = idx_list[neg_mask]
+
+        pos_inst = len(self.pos_idx)
+        neg_inst = len(self.neg_idx)
+        num_inst = pos_inst + neg_inst
+        self.pos_bs = math.floor(pos_inst * (batch_size / num_inst))
+        self.neg_bs = math.floor(neg_inst * (batch_size / num_inst))
+
+        batch_size = self.pos_bs + self.neg_bs
+        self.num_batch = math.ceil(num_inst / batch_size)
         logger = logging.getLogger(self.__class__.__name__)
-        logger.info('num of {} instances: {}'.format(hint, self.num_inst))
-        logger.info('num of batches per epoch: {}'.format(self.num_batch))
-        self.idx_list = np.arange(self.padding, self.num_inst)
-        if shuffle:
-            np.random.shuffle(self.idx_list)
+        logger.info(f'num of {hint} instances: {num_inst} (pos: {pos_inst}, neg: {neg_inst})')
+        logger.info(f'num of batches per epoch: {self.num_batch}')
+        logger.info(f'batch size: {batch_size}')
         self.cur_batch = 0
+        self.hint = hint
         
         
     def get_batch_index(self):
         if self.cur_batch > self.num_batch:
             return None
 
-        s_idx = self.cur_batch * self.batch_size
-        e_idx = min(len(self.idx_list) - 1, s_idx + self.batch_size)
-        res_idx = self.idx_list[s_idx:e_idx]
+        pos_s_idx = self.cur_batch * self.pos_bs
+        pos_e_idx = min(len(self.pos_idx) - 1, pos_s_idx + self.pos_bs)
+        neg_s_idx = self.cur_batch * self.neg_bs
+        neg_e_idx = min(len(self.neg_idx) - 1, neg_s_idx + self.neg_bs)
+        pos_batch = self.pos_idx[pos_s_idx: pos_e_idx]
+        neg_batch = self.neg_idx[neg_s_idx: neg_e_idx]
         self.cur_batch += 1
         print(f"{self.hint} batch {self.cur_batch}/{self.num_batch}\t\r", end='')
-        return res_idx
+        return pos_batch, neg_batch
 
     def reset(self):
         self.cur_batch = 0
-        if self.shuffle:
-            np.random.shuffle(self.idx_list)
 
 def _load_base(dataset: str, n_dim=None, e_dim=None):
-    with open(f'./processed/{dataset}/desc.json', 'r') as f:
+    with open(f'./data/processed/{dataset}/desc.json', 'r') as f:
         desc = json.load(f)
     
-    g_df = pd.read_csv(f'./processed/{dataset}/events.csv')
+    g_df = pd.read_csv(f'./data/processed/{dataset}/events.csv')
 
     # node_feat
-    if os.path.exists(f'./processed/{dataset}/node_ft.npy'):
-        n_feat = np.load(f'./processed/{dataset}/node_ft.npy')
+    if os.path.exists(f'./data/processed/{dataset}/node_ft.npy'):
+        n_feat = np.load(f'./data/processed/{dataset}/node_ft.npy')
     elif dataset == 'wsdm_b':
         n_feat = None
     else:
@@ -120,18 +68,18 @@ def _load_base(dataset: str, n_dim=None, e_dim=None):
         n_feat[0] = 0.
 
     # edge_feat
-    if os.path.exists(f'./processed/{dataset}/edge_ft.npy'):
-        e_feat = np.load(f'./processed/{dataset}/edge_ft.npy')[:,:32]
-    elif os.path.exists(f'./processed/{dataset}/edge_ft.csv'):
-        e_feat = pd.read_csv(f'./processed/{dataset}/edge_ft.csv', header=None, index_col=[0])
+    if os.path.exists(f'./data/processed/{dataset}/edge_ft.npy'):
+        e_feat = np.load(f'./data/processed/{dataset}/edge_ft.npy')[:,:32]
+    elif os.path.exists(f'./data/processed/{dataset}/edge_ft.csv'):
+        e_feat = pd.read_csv(f'./data/processed/{dataset}/edge_ft.csv', header=None, index_col=[0])
     elif dataset.startswith("wsdm"):
         e_feat = None
     else:
         e_feat = np.zeros((desc['num_edge'] + 1, e_dim))
 
     # edge_type_feat
-    if os.path.exists(f'./processed/{dataset}/etype_ft.npy'):
-        etype_ft = np.load(f'./processed/{dataset}/etype_ft.npy')
+    if os.path.exists(f'./data/processed/{dataset}/etype_ft.npy'):
+        etype_ft = np.load(f'./data/processed/{dataset}/etype_ft.npy')
     else:
         etype_ft = None
     return g_df, n_feat, e_feat, etype_ft, desc
@@ -149,7 +97,7 @@ def load_data(dataset:str, n_dim=None, e_dim=None):
 def load_data_with_test_events(dataset, n_dim, e_dim):
     g_train, n_feat, e_feat, etype_ft, desc = _load_base(dataset, n_dim, e_dim)
 
-    g_test = pd.read_csv(f'./processed/{dataset}/events_test.csv')
+    g_test = pd.read_csv(f'./data/processed/{dataset}/events_test.csv')
     
     g = g_train._append(g_test).sort_values(by="ts").reset_index(drop=True)
     return TemHetGraphData(g, n_feat, e_feat, desc['num_node_type'], desc['num_edge_type'], etype_ft)

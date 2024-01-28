@@ -4,13 +4,13 @@ import torch
 import torch.nn as nn
 from collections import defaultdict
 
-from graph import NeighborFinder
-from layers import *
+from model.graph import NeighborFinder
+from model.layers import *
 
-from memory_module.memory import Memory
-from memory_module.message_aggregator import LastMessageAggregator
-from memory_module.message_function import MLPMessageFunction
-from memory_module.memory_updater import RNNMemoryUpdater
+from model.memory_module.memory import Memory
+from model.memory_module.message_aggregator import LastMessageAggregator
+from model.memory_module.message_function import MLPMessageFunction
+from model.memory_module.memory_updater import RNNMemoryUpdater
 
 
 class THAN(nn.Module):
@@ -93,43 +93,22 @@ class THAN(nn.Module):
                                     etype_l).squeeze(dim=-1)
         
         return score.sigmoid()
-    
-    # def link_contrast(self, src_idx_l, tgt_idx_l, bgd_idx_l, cut_time_l, src_utype_l, tgt_utype_l, bgd_utype_l, etype_l, num_neighbors=20):
-    #     n_samples = len(src_idx_l)
-    #     nodes = np.concatenate([src_idx_l, tgt_idx_l, bgd_idx_l])
-    #     timestamps = np.concatenate([cut_time_l, cut_time_l, cut_time_l])
-    #     node_types = np.concatenate([src_utype_l, tgt_utype_l, bgd_utype_l])
-    #     positive_nodes = np.unique(nodes[:2*n_samples])
-
-    #     node_embed = self.tem_conv(nodes, timestamps, node_types, self.num_layers, num_neighbors)
-
-    #     if self.use_memory:
-    #         pos_idx = 2*n_samples
-    #         self.store_messages(nodes[:pos_idx], node_embed[:pos_idx], timestamps[:pos_idx], positive_nodes)
-
-    #     src_embed = node_embed[:n_samples]
-    #     tgt_embed = node_embed[n_samples:2*n_samples]
-    #     bgd_embed = node_embed[2*n_samples:]
-        
-    #     pos_score = self.affinity_score(src_embed, tgt_embed, etype_l).squeeze(dim=-1)
-    #     neg_score = self.affinity_score(src_embed, bgd_embed, etype_l).squeeze(dim=-1)
-        
-    #     return pos_score.sigmoid(), neg_score.sigmoid()
 
     def link_contrast(self, pos_src_idx_l, pos_tgt_idx_l, neg_src_idx_l,
-                      neg_tgt_idx_l, cut_time_l, pos_src_utype_l,
-                      pos_tgt_utype_l, neg_src_utype_l, neg_tgt_utype_l,
-                      pos_etype_l, neg_etype_l, num_neighbors=20):
+                      neg_tgt_idx_l, pos_cut_time_l, neg_cut_time_l,
+                      pos_src_utype_l, pos_tgt_utype_l, neg_src_utype_l,
+                      neg_tgt_utype_l, pos_etype_l, neg_etype_l,
+                      num_neighbors=20):
+        # TODO modify to arbitrary n-class classification
         pos_src, neg_src = len(pos_src_idx_l), len(neg_src_idx_l)
         pos_len = 2*pos_src
         nodes = np.concatenate([pos_src_idx_l, pos_tgt_idx_l,
                                 neg_src_idx_l, neg_tgt_idx_l])
-        timestamps = np.concatenate([cut_time_l, cut_time_l,
-                                     cut_time_l, cut_time_l])
+        timestamps = np.concatenate([pos_cut_time_l, pos_cut_time_l,
+                                     neg_cut_time_l, neg_cut_time_l])
         node_types = np.concatenate([pos_src_utype_l, pos_tgt_utype_l,
                                      neg_src_utype_l, neg_tgt_utype_l])
         positive_nodes = np.unique(nodes[:pos_len])
-
         node_embed = self.tem_conv(nodes, timestamps, node_types,
                                    self.num_layers, num_neighbors)
         

@@ -12,7 +12,7 @@ class Events(object):
         self.u_type_l = u_type_l
         self.v_type_l = v_type_l
         self.label_l = label_l
-        self.node_set = set(np.unique(np.hstack(self.src_l, self.dst_l)))
+        self.node_set = set(np.unique(np.hstack([self.src_l, self.dst_l])))
         self.num_nodes = len(self.node_set)
 
     def sample_by_mask(self, mask):
