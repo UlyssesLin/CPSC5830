@@ -84,8 +84,6 @@ def _load_base(dataset: str, n_dim=None, e_dim=None):
 
 
 def load_data(dataset:str, n_dim=None, e_dim=None):
-    if dataset == 'movielens':
-        return load_data_with_test_events(dataset, n_dim, e_dim)
 
     g_df, n_feat, e_feat, etype_ft, desc = _load_base(dataset, n_dim, e_dim)
 
@@ -136,10 +134,7 @@ def split_valid_train_nn_test(g: TemHetGraphData, train: TemHetGraphData, test: 
 
 
 def load_and_split_data_train_test(dataset:str, n_dim=None, e_dim=None, ratio=0.2):
-    if dataset == 'movielens':
-        g = load_data_with_test_events(dataset, n_dim, e_dim)
-    else:
-        g = load_data(dataset, n_dim, e_dim)
+    g = load_data(dataset, n_dim, e_dim)
     train, test = split_data_train_test(g, ratio)
     return g, train, test
 

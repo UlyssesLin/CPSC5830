@@ -1,12 +1,19 @@
 import pandas as pd
 import numpy as np
 import json
+import glob
+import os
 
 OUT_DIR = './data/processed/lol'
 OUT_EV = f'{OUT_DIR}/events.csv'
 OUT_DESC = f'{OUT_DIR}/desc.json'
-df = (pd.read_csv('data/raw/lol/2023_LoL_esports_match_data_from_OraclesElixir.csv')
+IN_DIR = './data/raw/lol'
+
+all_files = glob.glob(os.path.join(IN_DIR, '*.csv'))
+df = (pd.concat((pd.read_csv(f) for f in all_files), ignore_index=True)
       .assign(ts = lambda _d: (pd.to_datetime(_d['date']).astype(int) / 10**9).astype(int)))
+# df = (pd.read_csv('./data/raw/lol/2023_LoL_esports_match_data_from_OraclesElixir.csv')
+#       .assign(ts = lambda _d: (pd.to_datetime(_d['date']).astype(int) / 10**9).astype(int)))
 matches = (df[['teamid', 'gameid', 'result', 'ts', 'gamelength']]
            .dropna()
            .drop_duplicates())
