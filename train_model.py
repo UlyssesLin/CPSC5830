@@ -25,8 +25,7 @@ UNIFORM = args.uniform
 DATA = args.data
 NUM_LAYER = args.n_layer
 LEARNING_RATE = args.lr
-# can`t shuffle if use memory
-SHUFFLE = False
+CLASSES = np.array([1, 2])
 
 MODEL_SAVE_PATH = f'./saved_models/{args.prefix}-{args.data}.pth'
 get_checkpoint_path = lambda epoch: f'./saved_checkpoints/{args.prefix}-{args.data}-{epoch}.pth'
@@ -39,12 +38,11 @@ logger.info(args)
 utils.set_random_seed(2022)
 
 
-def evaluate_score(pos_size, neg_size, pos_prob, neg_prob):
-    pred_score = np.concatenate([(pos_prob).cpu().detach().numpy(), (neg_prob).cpu().detach().numpy()])
-    true_label = np.concatenate([np.ones(pos_size), np.zeros(neg_size)])
+def evaluate_score(labels, prob):
+    pred_score = np.array((prob).cpu().detach().numpy())
 
-    auc = roc_auc_score(true_label, pred_score)
-    ap = average_precision_score(true_label, pred_score)
+    auc = roc_auc_score(labels, pred_score)
+    ap = average_precision_score(labels, pred_score)
     return ap, auc
 
 
@@ -55,34 +53,39 @@ def eval_one_epoch(hint, model: THAN, batch_sampler, data):
         model = model.eval()
         batch_sampler.reset()
         while True:
-            pos_batch, neg_batch = batch_sampler.get_batch_index()
-            if pos_batch is None or len(pos_batch)==0 or neg_batch is None or len(neg_batch) == 0:
+            batches, counts, classes = batch_sampler.get_batch_index()
+            if counts is None or counts.sum()==0:
                 break
+            tiles = len(batches)
+            l = int(counts.sum() * tiles)
 
-            pos_src_l_cut, pos_dst_l_cut = data.src_l[pos_batch], data.dst_l[pos_batch]
-            pos_ts_l_cut = data.ts_l[pos_batch]
-            pos_src_utype_l = data.u_type_l[pos_batch]
-            pos_tgt_utype_l = data.v_type_l[pos_batch]
-            pos_etype_l = data.e_type_l[pos_batch]
-            
-            neg_src_l_cut, neg_dst_l_cut = data.src_l[neg_batch], data.dst_l[neg_batch]
-            neg_ts_l_cut = data.ts_l[neg_batch]
-            neg_src_utype_l = data.u_type_l[neg_batch]
-            neg_tgt_utype_l = data.v_type_l[neg_batch]
-            neg_etype_l = data.e_type_l[neg_batch] + 1
+            src_l_cut = np.empty(l, dtype=int)
+            dst_l_cut = np.empty(l, dtype=int)
+            ts_l_cut = np.empty(l, dtype=int)
+            src_utype_l_cut = np.empty(l, dtype=int)
+            dst_utype_l_cut = np.empty(l, dtype=int)
+            etype_l = np.empty(l, dtype=int)
+            lbls = np.empty(l)
+            s_idx = 0
+            for i, batch in enumerate(batches):
+                e_idx = s_idx + int(counts[i] * tiles)
+                src_l_cut[s_idx: e_idx] = np.tile(data.src_l[batch], tiles)
+                dst_l_cut[s_idx: e_idx] = np.tile(data.dst_l[batch], tiles)
+                ts_l_cut[s_idx: e_idx] = np.tile(data.ts_l[batch], tiles)
+                src_utype_l_cut[s_idx: e_idx] = np.tile(data.u_type_l[batch],
+                                                        tiles)
+                dst_utype_l_cut[s_idx: e_idx] = np.tile(data.v_type_l[batch],
+                                                        tiles)
+                etype_slice = np.repeat(classes, len(batch))
+                etype_l[s_idx: e_idx] = etype_slice
+                lbls[s_idx: e_idx] = (etype_slice == classes[i]).astype(np.float64)
+                s_idx = e_idx
 
-            pos_size = len(pos_batch)
-            neg_size = len(neg_batch)
+            prob = model.link_contrast(src_l_cut, dst_l_cut, ts_l_cut,
+                                       src_utype_l_cut, dst_utype_l_cut,
+                                       etype_l, lbls, NUM_NEIGHBORS)
 
-            pos_prob, neg_prob = model.link_contrast(pos_src_l_cut, pos_dst_l_cut,
-                                                     neg_src_l_cut, neg_dst_l_cut,
-                                                     pos_ts_l_cut, neg_ts_l_cut,
-                                                     pos_src_utype_l, pos_tgt_utype_l,
-                                                     neg_src_utype_l, neg_tgt_utype_l,
-                                                     pos_etype_l, neg_etype_l,
-                                                     NUM_NEIGHBORS)
-
-            ap, auc = evaluate_score(pos_size, neg_size, pos_prob, neg_prob)
+            ap, auc = evaluate_score(lbls, prob)
             val_ap.append(ap)
             val_auc.append(auc)
 
@@ -96,8 +99,8 @@ g, train, test = loader.load_and_split_data_train_test(DATA, args.n_dim, args.e_
 train_ngh_finder = loader.get_neighbor_finder(train, g.max_idx, UNIFORM, num_edge_type=g.num_e_type)
 full_ngh_finder = loader.get_neighbor_finder(g, g.max_idx, UNIFORM, num_edge_type=g.num_e_type)
 # mini-batch idx sampler
-train_batch_sampler = MiniBatchSampler(train.e_idx_l, train.e_type_l, BATCH_SIZE, 'train')
-test_batch_sampler = MiniBatchSampler(test.e_idx_l, test.e_type_l, BATCH_SIZE, 'test')
+train_batch_sampler = MiniBatchSampler(train.e_type_l, BATCH_SIZE, 'train', CLASSES)
+test_batch_sampler = MiniBatchSampler(test.e_type_l, BATCH_SIZE, 'test', CLASSES)
 
 
 device = torch.device('cuda:{}'.format(GPU)) if GPU != -1 else 'cpu'
@@ -126,48 +129,53 @@ for i in range(args.n_runs):
         logger.info('start {} epoch'.format(epoch))
         train_batch_sampler.reset()
         while True:
-            pos_batch, neg_batch = train_batch_sampler.get_batch_index()
-            if pos_batch is None or len(pos_batch)==0 or neg_batch is None or len(neg_batch) == 0:
+
+            batches, counts, classes = train_batch_sampler.get_batch_index()
+            if counts is None or counts.sum()==0:
                 break
+            tiles = len(batches)
+            l = int(counts.sum() * tiles)
 
-            pos_src_l_cut, pos_dst_l_cut = train.src_l[pos_batch], train.dst_l[pos_batch]
-            pos_ts_l_cut = train.ts_l[pos_batch]
-            pos_src_utype_l = train.u_type_l[pos_batch]
-            pos_tgt_utype_l = train.v_type_l[pos_batch]
-            pos_etype_l = train.e_type_l[pos_batch]
-            
-            neg_src_l_cut, neg_dst_l_cut = train.src_l[neg_batch], train.dst_l[neg_batch]
-            neg_ts_l_cut = train.ts_l[neg_batch]
-            neg_src_utype_l = train.u_type_l[neg_batch]
-            neg_tgt_utype_l = train.v_type_l[neg_batch]
-            neg_etype_l = train.e_type_l[neg_batch] + 1
+            src_l_cut = np.empty(l, dtype=int)
+            dst_l_cut = np.empty(l, dtype=int)
+            ts_l_cut = np.empty(l, dtype=int)
+            src_utype_l_cut = np.empty(l, dtype=int)
+            dst_utype_l_cut = np.empty(l, dtype=int)
+            etype_l = np.empty(l, dtype=int)
+            lbls = np.empty(l)
+            s_idx = 0
 
-            pos_size = len(pos_batch)
-            neg_size = len(neg_batch)
+            for i, batch in enumerate(batches):
+                e_idx = s_idx + int(counts[i] * tiles)
+                src_l_cut[s_idx: e_idx] = np.tile(train.src_l[batch], tiles)
+                dst_l_cut[s_idx: e_idx] = np.tile(train.dst_l[batch], tiles)
+                ts_l_cut[s_idx: e_idx] = np.tile(train.ts_l[batch], tiles)
+                src_utype_l_cut[s_idx: e_idx] = np.tile(train.u_type_l[batch],
+                                                        tiles)
+                dst_utype_l_cut[s_idx: e_idx] = np.tile(train.v_type_l[batch],
+                                                        tiles)
+                etype_slice = np.repeat(classes, len(batch))
+                etype_l[s_idx: e_idx] = etype_slice
+                lbls[s_idx: e_idx] = (etype_slice == classes[i])
+                s_idx = e_idx
 
             with torch.no_grad():
-                pos_label = torch.ones(pos_size, dtype=torch.float, device=device)
-                neg_label = torch.zeros(neg_size, dtype=torch.float, device=device)
-                lbl = torch.cat((pos_label, neg_label), dim=0)
+                lbl = torch.from_numpy(lbls).type(torch.float).to(device)
 
             optimizer.zero_grad()
             model = model.train()
-            pos_prob, neg_prob = model.link_contrast(pos_src_l_cut, pos_dst_l_cut,
-                                                     neg_src_l_cut, neg_dst_l_cut,
-                                                     pos_ts_l_cut, neg_ts_l_cut,
-                                                     pos_src_utype_l, pos_tgt_utype_l,
-                                                     neg_src_utype_l, neg_tgt_utype_l,
-                                                     pos_etype_l, neg_etype_l,
-                                                     NUM_NEIGHBORS)
+            prob = model.link_contrast(src_l_cut, dst_l_cut, ts_l_cut,
+                                       src_utype_l_cut, dst_utype_l_cut,
+                                       etype_l, lbls, NUM_NEIGHBORS)
 
-            loss = criterion(torch.cat((pos_prob, neg_prob), dim=0), lbl)
+            loss = criterion(prob, lbl)
             loss += args.beta * model.affinity_score.reg_loss()
 
             loss.backward()
             optimizer.step()
             with torch.no_grad():
                 model = model.eval()
-                _ap, _auc = evaluate_score(pos_size, neg_size, pos_prob, neg_prob)
+                _ap, _auc = evaluate_score(lbls, prob)
                 ap.append(_ap)
                 auc.append(_auc)
                 m_loss.append(loss.item())

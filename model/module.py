@@ -94,38 +94,26 @@ class THAN(nn.Module):
         
         return score.sigmoid()
 
-    def link_contrast(self, pos_src_idx_l, pos_tgt_idx_l, neg_src_idx_l,
-                      neg_tgt_idx_l, pos_cut_time_l, neg_cut_time_l,
-                      pos_src_utype_l, pos_tgt_utype_l, neg_src_utype_l,
-                      neg_tgt_utype_l, pos_etype_l, neg_etype_l,
-                      num_neighbors=20):
-        # TODO modify to arbitrary n-class classification
-        pos_src, neg_src = len(pos_src_idx_l), len(neg_src_idx_l)
-        pos_len = 2*pos_src
-        nodes = np.concatenate([pos_src_idx_l, pos_tgt_idx_l,
-                                neg_src_idx_l, neg_tgt_idx_l])
-        timestamps = np.concatenate([pos_cut_time_l, pos_cut_time_l,
-                                     neg_cut_time_l, neg_cut_time_l])
-        node_types = np.concatenate([pos_src_utype_l, pos_tgt_utype_l,
-                                     neg_src_utype_l, neg_tgt_utype_l])
-        positive_nodes = np.unique(nodes[:pos_len])
+    def link_contrast(self, src_idx_l, tgt_idx_l, cut_time_l, src_utype_l,
+                      tgt_utype_l, etype_l, lbls, num_neighbors=20):
+        nodes = np.concatenate([src_idx_l, tgt_idx_l])
+        timestamps = np.concatenate([cut_time_l, cut_time_l])
+        node_types = np.concatenate([src_utype_l, tgt_utype_l])
+        mask = np.concatenate([lbls, lbls]).astype(bool)
+
         node_embed = self.tem_conv(nodes, timestamps, node_types,
                                    self.num_layers, num_neighbors)
         
-        self.store_messages(nodes[:pos_len], node_embed[:pos_len],
-                            timestamps[:pos_len], positive_nodes)
+        self.store_messages(nodes[mask], node_embed[mask],
+                            timestamps[mask], np.unique(nodes[mask]))
         
-        pos_src_embed = node_embed[:pos_src]
-        pos_tgt_embed = node_embed[pos_src:pos_len]
-        neg_src_embed = node_embed[pos_len:pos_len + neg_src]
-        neg_tgt_embed = node_embed[pos_len + neg_src:]
+        src_embed = node_embed[:len(src_idx_l)]
+        tgt_embed = node_embed[len(src_idx_l):]
 
-        pos_score = self.affinity_score(pos_src_embed, pos_tgt_embed,
-                                        pos_etype_l).squeeze(dim=-1)
-        neg_score = self.affinity_score(neg_src_embed, neg_tgt_embed,
-                                        neg_etype_l).squeeze(dim=-1)
+        score = self.affinity_score(src_embed, tgt_embed,
+                                        etype_l).squeeze(dim=-1)
         
-        return pos_score.sigmoid(), neg_score.sigmoid()
+        return score.sigmoid()
     
 
     def tem_conv(self, src_idx_l, cut_time_l, src_utype_l, curr_layers,

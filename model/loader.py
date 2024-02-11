@@ -10,27 +10,21 @@ from model.graph import *
 
 
 class MiniBatchSampler(object):
-    def __init__(self, e_idx_l, e_type_l, batch_size, hint):
+    def __init__(self, e_type_l, batch_size, hint, classes):
 
-        idx_list = np.arange(len(e_idx_l))
+        idxs = np.arange(len(e_type_l))
+        self.classes = classes
+        self.e_type_l = e_type_l
+        self.idx_list = idxs[np.isin(self.e_type_l, self.classes)]
+        num_inst = len(self.idx_list)
 
-        pos_mask = e_type_l == 2
-        neg_mask = e_type_l == 1
-        self.pos_idx = idx_list[pos_mask]
-        self.neg_idx = idx_list[neg_mask]
-
-        pos_inst = len(self.pos_idx)
-        neg_inst = len(self.neg_idx)
-        num_inst = pos_inst + neg_inst
-        self.pos_bs = math.floor(pos_inst * (batch_size / num_inst))
-        self.neg_bs = math.floor(neg_inst * (batch_size / num_inst))
-
-        batch_size = self.pos_bs + self.neg_bs
+        self.batch_size = batch_size
         self.num_batch = math.ceil(num_inst / batch_size)
         logger = logging.getLogger(self.__class__.__name__)
-        logger.info(f'num of {hint} instances: {num_inst} (pos: {pos_inst}, neg: {neg_inst})')
+        logger.info(f'num of {hint} instances: {num_inst}')
+        logger.info(f'num of classes: {len(classes)}')
         logger.info(f'num of batches per epoch: {self.num_batch}')
-        logger.info(f'batch size: {batch_size}')
+        logger.info(f'batch size: {self.batch_size}')
         self.cur_batch = 0
         self.hint = hint
         
@@ -38,16 +32,20 @@ class MiniBatchSampler(object):
     def get_batch_index(self):
         if self.cur_batch > self.num_batch:
             return None
+        s_idx = self.cur_batch * self.batch_size
+        e_idx = min(len(self.idx_list), s_idx + self.batch_size)
 
-        pos_s_idx = self.cur_batch * self.pos_bs
-        pos_e_idx = min(len(self.pos_idx) - 1, pos_s_idx + self.pos_bs)
-        neg_s_idx = self.cur_batch * self.neg_bs
-        neg_e_idx = min(len(self.neg_idx) - 1, neg_s_idx + self.neg_bs)
-        pos_batch = self.pos_idx[pos_s_idx: pos_e_idx]
-        neg_batch = self.neg_idx[neg_s_idx: neg_e_idx]
+        batch = self.idx_list[s_idx: e_idx]
+        batches = []
+        counts = np.empty(len(self.classes))
+        for i, c in enumerate(self.classes):
+            mask = self.e_type_l[batch] == c
+            batches.append(batch[mask])
+            counts[i] = len(batch[mask])
+
         self.cur_batch += 1
         print(f"{self.hint} batch {self.cur_batch}/{self.num_batch}\t\r", end='')
-        return pos_batch, neg_batch
+        return batches, counts, self.classes
 
     def reset(self):
         self.cur_batch = 0
@@ -69,7 +67,8 @@ def _load_base(dataset: str, n_dim=None, e_dim=None):
 
     # edge_feat
     if os.path.exists(f'./data/processed/{dataset}/edge_ft.npy'):
-        e_feat = np.load(f'./data/processed/{dataset}/edge_ft.npy')[:,:32]
+        # e_feat = np.load(f'./data/processed/{dataset}/edge_ft.npy')[:,:32]
+        e_feat = np.load(f'./data/processed/{dataset}/edge_ft.npy')
     elif os.path.exists(f'./data/processed/{dataset}/edge_ft.csv'):
         e_feat = pd.read_csv(f'./data/processed/{dataset}/edge_ft.csv', header=None, index_col=[0])
     elif dataset.startswith("wsdm"):
@@ -86,8 +85,6 @@ def _load_base(dataset: str, n_dim=None, e_dim=None):
 
 
 def load_data(dataset:str, n_dim=None, e_dim=None):
-    if dataset == 'movielens':
-        return load_data_with_test_events(dataset, n_dim, e_dim)
 
     g_df, n_feat, e_feat, etype_ft, desc = _load_base(dataset, n_dim, e_dim)
 
@@ -138,10 +135,7 @@ def split_valid_train_nn_test(g: TemHetGraphData, train: TemHetGraphData, test: 
 
 
 def load_and_split_data_train_test(dataset:str, n_dim=None, e_dim=None, ratio=0.2):
-    if dataset == 'movielens':
-        g = load_data_with_test_events(dataset, n_dim, e_dim)
-    else:
-        g = load_data(dataset, n_dim, e_dim)
+    g = load_data(dataset, n_dim, e_dim)
     train, test = split_data_train_test(g, ratio)
     return g, train, test
 
