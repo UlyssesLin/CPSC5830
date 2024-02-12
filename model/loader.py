@@ -115,6 +115,24 @@ def split_data_train_test(g: TemHetGraphData, test_ratio=0.2):
 
     return train, test
 
+def split_data_train_test_val(g: TemHetGraphData, test_ratio=0.25, val_ratio=0.25):
+    test_time = np.quantile(g.ts_l, 1. - (test_ratio + val_ratio))
+    val_time = np.quantile(g.ts_l, 1. - val_ratio)
+
+    ''' train '''
+    valid_train_flag = g.ts_l < test_time
+    train = g.sample_by_mask(valid_train_flag)
+
+    ''' test '''
+    valid_test_flag = val_time > g.ts_l >= test_time  # total test edges
+    test = g.sample_by_mask(valid_test_flag)
+
+    ''' val '''
+    valid_val_flag = g.ts_l >= val_time  # total val edges
+    val = g.sample_by_mask(valid_val_flag)
+
+    return train, test, val
+
 # mask 10% node
 def split_valid_train_nn_test(g: TemHetGraphData, train: TemHetGraphData, test: TemHetGraphData, mask_ratio=0.1):
     # mask_ratio: Make mask_ratio (eg. 10%) of the nodes not appear in the training set to achieve inductive
