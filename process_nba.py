@@ -121,6 +121,9 @@ playersfeat = (playersfeat
            .assign(u = lambda _d: _d['u'].map(lambda x: teams_dict[x]))
            .assign(v = lambda _d: _d['v'].map(lambda x: player_dict[x])))
 
+pd.DataFrame.from_dict(player_dict, orient='index').to_csv(f'{OUT_DIR}/player_dict.csv')
+pd.DataFrame.from_dict(teams_dict, orient='index').to_csv(f'{OUT_DIR}/teams_dict.csv')
+
 # events = matches.sort_values('ts').reset_index(drop=True)
 # events = pd.concat([matches, players]).sort_values('ts').reset_index(drop=True).fillna(0)
 events = pd.concat([matches, players, matchesfeat, playersfeat]).sort_values('ts').reset_index(drop=True).fillna(0)

@@ -25,10 +25,9 @@ UNIFORM = args.uniform
 DATA = args.data
 NUM_LAYER = args.n_layer
 LEARNING_RATE = args.lr
-CLASSES = np.array([1, 2, 3])
+CLASSES = np.array([1, 2])
 
 MODEL_SAVE_PATH = f'./saved_models/{args.prefix}-{args.data}.pth'
-get_checkpoint_path = lambda epoch: f'./saved_checkpoints/{args.prefix}-{args.data}-{epoch}.pth'
 
 utils.check_dirs()
 
@@ -93,11 +92,11 @@ def eval_one_epoch(hint, model: THAN, batch_sampler, data):
 
 
 # load data and split into train val test
-g, train, test = loader.load_and_split_data_train_test(DATA, args.n_dim, args.e_dim)
+g, g_test, train, test, _ = loader.load_and_split_data_train_test_val(DATA, args.n_dim, args.e_dim)
 
 ### Initialize the data structure for graph and edge sampling
 train_ngh_finder = loader.get_neighbor_finder(train, g.max_idx, UNIFORM, num_edge_type=g.num_e_type)
-full_ngh_finder = loader.get_neighbor_finder(g, g.max_idx, UNIFORM, num_edge_type=g.num_e_type)
+test_ngh_finder = loader.get_neighbor_finder(g_test, g.max_idx, UNIFORM, num_edge_type=g.num_e_type)
 # mini-batch idx sampler
 train_batch_sampler = MiniBatchSampler(train.e_type_l, BATCH_SIZE, 'train', CLASSES)
 test_batch_sampler = MiniBatchSampler(test.e_type_l, BATCH_SIZE, 'test', CLASSES)
@@ -189,7 +188,7 @@ for i in range(args.n_runs):
         train_memory_backup = model.memory.backup_memory()
         
         # validation phase use all information
-        model.ngh_finder = full_ngh_finder
+        model.ngh_finder = test_ngh_finder
         test_auc, test_ap = eval_one_epoch('test', model, test_batch_sampler, test)
         
         model.memory.restore_memory(train_memory_backup)
@@ -204,8 +203,7 @@ for i in range(args.n_runs):
         
         if test_auc > best_auc:
             best_auc, best_ap = test_auc, test_ap
-        
-        torch.save(model.state_dict(), get_checkpoint_path(epoch))
+            torch.save(model.state_dict(), MODEL_SAVE_PATH)
 
     logger.info('Test Best: auc: {:.4f}, ap: {:.4f}\n\n'.format(best_auc, best_ap))
 
