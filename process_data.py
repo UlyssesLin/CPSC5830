@@ -14,7 +14,7 @@ IN_DIR = './data/raw/lol'
 
 all_files = glob.glob(os.path.join(IN_DIR, '*.csv'))
 df = (pd.concat((pd.read_csv(f) for f in all_files), ignore_index=True)
-      .assign(ts = lambda _d: (pd.to_datetime(_d['date']).astype(int) / 10**9).astype(int)))
+      .assign(ts = lambda _d: (pd.to_datetime(_d['date']).astype(int) / 10**9).astype('int64')))
 
 team_cols = ['patch', 'towers', 'barons', 'inhibitors', 'dragons', 'opp_towers', 'opp_barons', 'opp_inhibitors', 'opp_dragons']
 player_cols = ['position', 'champion', 'kills', 'deaths', 'assists', 'firstblood', 'damagetochampions', 'wardsplaced',
