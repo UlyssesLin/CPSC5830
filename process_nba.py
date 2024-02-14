@@ -21,6 +21,9 @@ def calctime(time):
 matches = pd.read_csv('./data/raw/nba/games.csv').assign(ts = lambda _d: (pd.to_datetime(_d['game_date']).astype(int) / 10**9).astype(int))
 players = pd.read_csv('./data/raw/nba/players.csv')
 
+# matches = matches.loc[matches['season_type'].isin(['Regular Season', ''])]
+# players = players.loc[players['gameid'].isin(matches['game_id'])]
+
 matches_cols = ['fgm_home', 'fga_home', 'fg_pct_home', 'fg3m_home', 'fg3a_home',
                 'fg3_pct_home', 'ftm_home', 'fta_home', 'ft_pct_home', 'oreb_home',
                 'dreb_home', 'reb_home', 'ast_home', 'stl_home', 'blk_home', 'tov_home',
@@ -69,7 +72,7 @@ playersfeat[players_cols] = playersfeat[players_cols].apply(lambda x: (x - x.min
 
 matches['wl_home'] = matches['wl_home'].map({'W': 2, 'L': 1})
 matches = (matches
-           .assign(ts = lambda _d: _d['ts'])
+           .assign(ts = lambda _d: _d['ts'] + 1)
            .rename(columns={'team_id_home': 'u', 'team_id_away': 'v', 'wl_home': 'e_type'})
            .assign(u_type = 1)
            .assign(v_type = 1)

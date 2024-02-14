@@ -25,7 +25,7 @@ UNIFORM = args.uniform
 DATA = args.data
 NUM_LAYER = args.n_layer
 LEARNING_RATE = args.lr
-CLASSES = np.array([1, 2, 3])
+CLASSES = np.array([1, 2])
 
 MODEL_SAVE_PATH = f'./saved_models/{args.prefix}-{args.data}.pth'
 get_checkpoint_path = lambda epoch: f'./saved_checkpoints/{args.prefix}-{args.data}-{epoch}.pth'
