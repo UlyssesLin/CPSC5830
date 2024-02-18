@@ -127,25 +127,23 @@ playersfeat = (playersfeat
 pd.DataFrame.from_dict(player_dict, orient='index').to_csv(f'{OUT_DIR}/player_dict.csv')
 pd.DataFrame.from_dict(teams_dict, orient='index').to_csv(f'{OUT_DIR}/teams_dict.csv')
 
-# events = matches.sort_values('ts').reset_index(drop=True)
-# events = pd.concat([matches, players]).sort_values('ts').reset_index(drop=True).fillna(0)
-events = pd.concat([matches, players, matchesfeat, playersfeat]).sort_values('ts').reset_index(drop=True).fillna(0)
+events = pd.concat([matches, players]).sort_values('ts').reset_index(drop=True).fillna(0)
+# events = pd.concat([matches, players, matchesfeat, playersfeat]).sort_values('ts').reset_index(drop=True).fillna(0)
 
-e_ft = events.iloc[:, 6:].values
-max_dim = e_ft.shape[1]
-max_dim = max_dim + 4 - (max_dim % 4)
-empty = np.zeros((e_ft.shape[0], max_dim-e_ft.shape[1]))
-e_ft = np.hstack([e_ft, empty])
-e_feat = np.vstack([np.zeros(max_dim), e_ft])
-np.save(OUT_EDGE_FEAT, e_feat)
+# e_ft = events.iloc[:, 6:].values
+# max_dim = e_ft.shape[1]
+# max_dim = max_dim + 4 - (max_dim % 4)
+# empty = np.zeros((e_ft.shape[0], max_dim-e_ft.shape[1]))
+# e_ft = np.hstack([e_ft, empty])
+# e_feat = np.vstack([np.zeros(max_dim), e_ft])
+# np.save(OUT_EDGE_FEAT, e_feat)
 
-# NUM_NODE = len(teams)
 NUM_NODE = len(player) + len(teams)
 NUM_EV = len(events)
 NUM_N_TYPE = 2
-# NUM_E_TYPE = 2
-# NUM_E_TYPE = 3
-NUM_E_TYPE = 4
+NUM_E_TYPE = 3
+CLASSES = [1, 2]
+# NUM_E_TYPE = 4
 
 events = (events
           .assign(e_idx = np.arange(1, NUM_EV + 1))
@@ -158,7 +156,8 @@ desc = {
         "num_node": NUM_NODE,
         "num_edge": NUM_EV,
         "num_node_type": NUM_N_TYPE,
-        "num_edge_type": NUM_E_TYPE
+        "num_edge_type": NUM_E_TYPE,
+        "classes": CLASSES
     }
 with open('./data/processed/nba/desc.json', 'w') as f:
     json.dump(desc, f, indent=4)

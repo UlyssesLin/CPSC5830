@@ -25,6 +25,8 @@ def get_args():
     parser.add_argument('--t_dim', type=int, default=32, help='Dimentions of the time embedding')
     parser.add_argument('--e_type_dim', type=int, default=32, help='Dimentions of the edge type embedding')
     parser.add_argument('--uniform', action='store_true', help='take uniform sampling from temporal neighbors')
+    parser.add_argument('--val', type=float, default=0.25, help='val split')
+    parser.add_argument('--test', type=float, default=0.25, help='test split')
     
     try:
         args = parser.parse_args()

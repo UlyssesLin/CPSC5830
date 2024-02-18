@@ -88,7 +88,7 @@ def load_data(dataset:str, n_dim=None, e_dim=None):
 
     g_df, n_feat, e_feat, etype_ft, desc = _load_base(dataset, n_dim, e_dim)
 
-    return TemHetGraphData(g_df, n_feat, e_feat, desc['num_node_type'], desc['num_edge_type'], etype_ft)
+    return TemHetGraphData(g_df, n_feat, e_feat, desc['num_node_type'], desc['num_edge_type'], etype_ft), desc['classes']
 
 
 def load_data_with_test_events(dataset, n_dim, e_dim):
@@ -162,9 +162,9 @@ def load_and_split_data_train_test(dataset:str, n_dim=None, e_dim=None, ratio=0.
     return g, train, test
 
 def load_and_split_data_train_test_val(dataset:str, n_dim=None, e_dim=None, test_ratio=0.25, val_ratio=0.25):
-    g = load_data(dataset, n_dim, e_dim)
+    g, classes = load_data(dataset, n_dim, e_dim)
     g_test, train, test, val = split_data_train_test_val(g, test_ratio, val_ratio)
-    return g, g_test, train, test, val
+    return g, g_test, train, test, val, classes
 
 
 """ neighbor finder """

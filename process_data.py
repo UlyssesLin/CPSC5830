@@ -77,6 +77,9 @@ player = players['v'].sort_values().unique()
 idx_player = np.arange(len(player))
 player_dict = {player[k]: k + len(teams) for k in idx_player}
 
+pd.DataFrame.from_dict(player_dict, orient='index').to_csv(f'{OUT_DIR}/player_dict.csv')
+pd.DataFrame.from_dict(teams_dict, orient='index').to_csv(f'{OUT_DIR}/teams_dict.csv')
+
 matches = (matches
            .assign(u = lambda _d: _d['u'].map(lambda x: teams_dict[x]))
            .assign(v = lambda _d: _d['v'].map(lambda x: teams_dict[x])))
@@ -114,6 +117,7 @@ NUM_NODE = len(player) + len(teams)
 NUM_EV = len(events)
 NUM_N_TYPE = 2
 NUM_E_TYPE = 4
+CLASSES = [1, 2]
 
 events = (events
           .assign(e_idx = np.arange(1, NUM_EV + 1))
@@ -127,7 +131,8 @@ desc = {
         "num_node": NUM_NODE,
         "num_edge": NUM_EV,
         "num_node_type": NUM_N_TYPE,
-        "num_edge_type": NUM_E_TYPE
+        "num_edge_type": NUM_E_TYPE,
+        "classes": CLASSES
     }
 with open(OUT_DESC, 'w') as f:
     json.dump(desc, f, indent=4)

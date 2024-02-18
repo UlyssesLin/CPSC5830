@@ -25,7 +25,6 @@ UNIFORM = args.uniform
 DATA = args.data
 NUM_LAYER = args.n_layer
 LEARNING_RATE = args.lr
-CLASSES = np.array([1, 2])
 
 MODEL_SAVE_PATH = f'./saved_models/{args.prefix}-{args.data}.pth'
 
@@ -84,7 +83,9 @@ def eval_one_epoch(hint, model: THAN, batch_sampler, data):
                                        src_utype_l_cut, dst_utype_l_cut,
                                        etype_l, lbls, NUM_NEIGHBORS)
             prob = prob.reshape((len(prob) // tiles, tiles))
+            #lbls = lbls.reshape((len(lbls) // tiles, tiles))
             prob = prob / prob.sum(1, keepdim=True)
+            #prob = prob.reshape(len(prob) * tiles)
             prob = prob.reshape(len(prob) * tiles)
 
             ap, auc = evaluate_score(lbls, prob)
@@ -95,14 +96,14 @@ def eval_one_epoch(hint, model: THAN, batch_sampler, data):
 
 
 # load data and split into train val test
-g, g_test, train, test, _ = loader.load_and_split_data_train_test_val(DATA, args.n_dim, args.e_dim)
+g, g_test, train, test, _, p_classes = loader.load_and_split_data_train_test_val(DATA, args.n_dim, args.e_dim)
 
 ### Initialize the data structure for graph and edge sampling
 train_ngh_finder = loader.get_neighbor_finder(train, g.max_idx, UNIFORM, num_edge_type=g.num_e_type)
 test_ngh_finder = loader.get_neighbor_finder(g_test, g.max_idx, UNIFORM, num_edge_type=g.num_e_type)
 # mini-batch idx sampler
-train_batch_sampler = MiniBatchSampler(train.e_type_l, BATCH_SIZE, 'train', CLASSES)
-test_batch_sampler = MiniBatchSampler(test.e_type_l, BATCH_SIZE, 'test', CLASSES)
+train_batch_sampler = MiniBatchSampler(train.e_type_l, BATCH_SIZE, 'train', p_classes)
+test_batch_sampler = MiniBatchSampler(test.e_type_l, BATCH_SIZE, 'test', p_classes)
 
 
 device = torch.device('cuda:{}'.format(GPU)) if GPU != -1 else 'cpu'
@@ -170,8 +171,10 @@ for i in range(args.n_runs):
                                        src_utype_l_cut, dst_utype_l_cut,
                                        etype_l, lbls, NUM_NEIGHBORS)
             prob = prob.reshape((len(prob) // tiles, tiles))
+            lbl = lbl.reshape((len(lbl) // tiles, tiles))
+            lbls = lbls.reshape((len(lbls) // tiles, tiles))
             prob = prob / prob.sum(1, keepdim=True)
-            prob = prob.reshape(len(prob) * tiles)
+            #prob = prob.reshape(len(prob) * tiles)
 
             loss = criterion(prob, lbl)
             loss += args.beta * model.affinity_score.reg_loss()
@@ -180,6 +183,8 @@ for i in range(args.n_runs):
             optimizer.step()
             with torch.no_grad():
                 model = model.eval()
+                prob = prob.reshape(len(prob) * tiles)
+                lbls = lbls.reshape(len(lbls) * tiles)
                 _ap, _auc = evaluate_score(lbls, prob)
                 ap.append(_ap)
                 auc.append(_auc)
