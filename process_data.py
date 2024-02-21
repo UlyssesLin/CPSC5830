@@ -11,15 +11,20 @@ OUT_EV = f'{OUT_DIR}/events.csv'
 OUT_DESC = f'{OUT_DIR}/desc.json'
 OUT_EDGE_FEAT = f'{OUT_DIR}/edge_ft.npy'
 IN_DIR = './data/raw/lol'
+TEAM_COL_APPEND = ['teamname'] # any team cols needed for viz labeling
+PLAYER_COL_APPEND = ['playername'] # any player cols needed for viz labeling
 
 all_files = glob.glob(os.path.join(IN_DIR, '*.csv'))
 df = (pd.concat((pd.read_csv(f) for f in all_files), ignore_index=True)
-      .assign(ts = lambda _d: (pd.to_datetime(_d['date']).astype(int) / 10**9).astype('int64')))
+      .assign(ts = lambda _d: (pd.to_datetime(_d['date']).astype('int64') / 10**9).astype('int')))
 
 team_cols = ['patch', 'towers', 'barons', 'inhibitors', 'dragons', 'opp_towers', 'opp_barons', 'opp_inhibitors', 'opp_dragons']
 player_cols = ['position', 'champion', 'kills', 'deaths', 'assists', 'firstblood', 'damagetochampions', 'wardsplaced',
               'wardskilled', 'controlwardsbought', 'earnedgold', 'total cs', 'golddiffat10', 'xpdiffat10', 'csdiffat10',
               'killsat10', 'assistsat10', 'deathsat10', 'golddiffat15', 'xpdiffat15', 'csdiffat15', 'killsat15', 'assistsat15', 'deathsat15']
+
+team_cols.extend(TEAM_COL_APPEND)
+player_cols.extend(PLAYER_COL_APPEND)
 
 matches_normal_cols = team_cols
 player_normal_cols = player_cols[2:]
@@ -29,7 +34,6 @@ away = df.loc[df['side'] == 'Red', ['teamid', 'gameid']].dropna().drop_duplicate
 
 matches = home.merge(away, how='inner', on='gameid')
 players = df.loc[df['gameid'].isin(matches['gameid'].unique()), ['teamid', 'playerid', 'ts']].dropna().drop_duplicates()
-
 homefeat = df.loc[df['side'] == 'Blue', ['teamid', 'gameid', 'result', 'ts', 'gamelength'] + team_cols].dropna().drop_duplicates()
 awayfeat = df.loc[df['side'] == 'Red', ['teamid', 'gameid']].dropna().drop_duplicates()
 matchesfeat = homefeat.merge(awayfeat, how='inner', on='gameid')
@@ -72,13 +76,36 @@ playersfeat = (playersfeat
 teams = pd.concat([matches['u'], matches['v']]).sort_values().unique()
 idx_teams = np.arange(len(teams))
 teams_dict = {teams[k]: k for k in idx_teams}
-
 player = players['v'].sort_values().unique()
 idx_player = np.arange(len(player))
 player_dict = {player[k]: k + len(teams) for k in idx_player}
 
+for name_type in ['team', 'player']:
+    isTeam = name_type == 'team'
+    currNum = name_type + '_num'
+    currName = name_type + 'name'
+    curr_df = pd.DataFrame.from_dict(teams_dict if isTeam else player_dict, orient='index')
+    curr_df['long_' + name_type] = curr_df.index
+    curr_df = curr_df.rename(columns={0: currNum})
+    if isTeam:
+        right_df = matchesfeat.loc[:, ['u'] + TEAM_COL_APPEND].drop_duplicates()
+    else:
+        right_df = playersfeat.loc[:, ['v'] + PLAYER_COL_APPEND].drop_duplicates(subset='v')
+    curr_df = pd.merge(curr_df, right_df, how='left', left_on='long_' + name_type, right_on='u' if isTeam else 'v')
+    curr_df = curr_df.loc[:, ['long_' + name_type, currNum, currName]].drop_duplicates()
+    curr_df[currName] = curr_df[currName].fillna('No Name')
+    curr_df.to_csv(f'{OUT_DIR}/' + name_type + 's_with_names.csv')
+
 pd.DataFrame.from_dict(player_dict, orient='index').to_csv(f'{OUT_DIR}/player_dict.csv')
 pd.DataFrame.from_dict(teams_dict, orient='index').to_csv(f'{OUT_DIR}/teams_dict.csv')
+
+# Reset modded data for viz
+for appended in TEAM_COL_APPEND:
+    matchesfeat = matchesfeat.drop(appended, axis=1)
+    matches_normal_cols.remove(appended)
+for appended in PLAYER_COL_APPEND:
+    playersfeat = playersfeat.drop(appended, axis=1)
+    player_normal_cols.remove(appended)
 
 matches = (matches
            .assign(u = lambda _d: _d['u'].map(lambda x: teams_dict[x]))
