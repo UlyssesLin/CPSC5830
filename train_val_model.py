@@ -96,14 +96,14 @@ def eval_one_epoch(hint, model: THAN, batch_sampler, data):
 
 
 # load data and split into train val test
-g, g_test, train, test, _, p_classes = loader.load_and_split_data_train_test_val(DATA, args.n_dim, args.e_dim)
+g, g_val, train, val, _, p_classes = loader.load_and_split_data_train_test_val(DATA, args.n_dim, args.e_dim)
 
 ### Initialize the data structure for graph and edge sampling
 train_ngh_finder = loader.get_neighbor_finder(train, g.max_idx, UNIFORM, num_edge_type=g.num_e_type)
-test_ngh_finder = loader.get_neighbor_finder(g_test, g.max_idx, UNIFORM, num_edge_type=g.num_e_type)
+val_ngh_finder = loader.get_neighbor_finder(g_val, g.max_idx, UNIFORM, num_edge_type=g.num_e_type)
 # mini-batch idx sampler
 train_batch_sampler = MiniBatchSampler(train.e_type_l, BATCH_SIZE, 'train', p_classes)
-test_batch_sampler = MiniBatchSampler(test.e_type_l, BATCH_SIZE, 'test', p_classes)
+val_batch_sampler = MiniBatchSampler(val.e_type_l, BATCH_SIZE, 'val', p_classes)
 
 
 device = torch.device('cuda:{}'.format(GPU)) if GPU != -1 else 'cpu'
@@ -199,8 +199,8 @@ for i in range(args.n_runs):
         train_memory_backup = model.memory.backup_memory()
         
         # validation phase use all information
-        model.ngh_finder = test_ngh_finder
-        test_auc, test_ap = eval_one_epoch('test', model, test_batch_sampler, test)
+        model.ngh_finder = val_ngh_finder
+        test_auc, test_ap = eval_one_epoch('val', model, val_batch_sampler, val)
         
         model.memory.restore_memory(train_memory_backup)
         
@@ -210,13 +210,13 @@ for i in range(args.n_runs):
         logger.info('epoch: {}, time: {:.1f}'.format(epoch, end_time - start_time))
         logger.info('Epoch mean loss: {}'.format(np.mean(m_loss)))
         logger.info('train: auc: {:.4f}, ap: {:.4f}'.format(np.mean(auc), np.mean(ap)))
-        logger.info('test: auc: {:.4f}, ap: {:.4f}'.format(test_auc, test_ap))
+        logger.info('val: auc: {:.4f}, ap: {:.4f}'.format(test_auc, test_ap))
         
         if test_auc > best_auc:
             best_auc, best_ap = test_auc, test_ap
             torch.save(model.state_dict(), MODEL_SAVE_PATH)
 
-    logger.info('Test Best: auc: {:.4f}, ap: {:.4f}\n\n'.format(best_auc, best_ap))
+    logger.info('Val Best: auc: {:.4f}, ap: {:.4f}\n\n'.format(best_auc, best_ap))
 
     auc_l.append(best_auc)
     ap_l.append(best_ap)

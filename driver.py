@@ -1,105 +1,70 @@
+# model.memory.__init_memory__()
+        
+# model.ngh_finder = train_ngh_finder
+#logger.info('start {} epoch'.format(epoch))
 import torch
-import numpy as np
-import time
+import model.loader as loader
+import model.utils as utils
+import model.evaluate as evaluate
 
-from sklearn.metrics import average_precision_score
-from sklearn.metrics import roc_auc_score
+from model.loader import MiniBatchSampler
+
+from model.module import THAN
 
 class Driver():
 
-    def __eval_loop(self, model, batches, counts, classes, data, n_nghs):
+    def __init__(self, args, logger):
+        # load data and split into train val test
+        self.g, self.g_val, self.train, self.val, self.test, self.p_classes = \
+            loader.load_and_split_data_train_test_val(args.data, args.n_dim,
+                                                      args.e_dim, args.v_ratio,
+                                                      args.t_ratio)
 
-        tiles = len(batches)
-        l = int(counts.sum() * tiles)
+        ### Initialize the data structure for graph and edge sampling
+        self.train_ngh_finder = loader.get_neighbor_finder(self.train,
+                                                           self.g.max_idx,
+                                                           args.uniform,
+                                                           self.g.num_e_type)
+        self.val_ngh_finder = loader.get_neighbor_finder(self.g_test,
+                                                          self.g.max_idx,
+                                                          args.uniform,
+                                                          self.g.num_e_type)
+        self.test_ngh_finder = loader.get_neighbor_finder(self.g,
+                                                          self.g.max_idx,
+                                                          args.uniform,
+                                                          self.g.num_e_type)
+        # mini-batch idx sampler
+        self.train_batch_sampler = MiniBatchSampler(self.train.e_type_l,
+                                                    args.bs,
+                                                    'train', self.p_classes)
+        self.val_batch_sampler = MiniBatchSampler(self.val.e_type_l, args.bs,
+                                                   'test', self.p_classes)
+        
 
-        src_l_cut = np.empty(l, dtype=int)
-        dst_l_cut = np.empty(l, dtype=int)
-        ts_l_cut = np.empty(l, dtype=int)
-        src_utype_l_cut = np.empty(l, dtype=int)
-        dst_utype_l_cut = np.empty(l, dtype=int)
-        etype_l = np.empty(l, dtype=int)
-        lbls = np.empty(l)
-        s_idx = 0
+        self.device = torch.device('cuda:{}'.format(args.gpu)) if args.gpu != -1 else 'cpu'
+        
+        self.args = args
+        self.model = THAN(self.train_ngh_finder, self.g.n_feat, self.g.e_feat,
+                          self.g.e_type_feat, self.g.num_n_type,
+                          self.g.num_e_type, self.args.t_dim,
+                          self.args.n_layers, self.args.n_heads,
+                          self.args.dropout, self.device)
+        
+        self.logger = logger
 
-        for i, batch in enumerate(batches):
-            e_idx = s_idx + int(counts[i] * tiles)
-            src_l_cut[s_idx: e_idx] = np.repeat(data.src_l[batch], tiles)
-            dst_l_cut[s_idx: e_idx] = np.repeat(data.dst_l[batch], tiles)
-            ts_l_cut[s_idx: e_idx] = np.repeat(data.ts_l[batch], tiles)
-            src_utype_l_cut[s_idx: e_idx] = np.repeat(data.u_type_l[batch],
-                                                    tiles)
-            dst_utype_l_cut[s_idx: e_idx] = np.repeat(data.v_type_l[batch],
-                                                    tiles)
-            etype_slice = np.tile(classes, len(batch))
-            etype_l[s_idx: e_idx] = etype_slice
-            lbls[s_idx: e_idx] = (etype_slice == classes[i])
-            s_idx = e_idx
-        prob = model.link_contrast(src_l_cut, dst_l_cut, ts_l_cut,
-                                    src_utype_l_cut, dst_utype_l_cut,
-                                    etype_l, lbls, n_nghs)
-        prob = prob.reshape((len(prob) // tiles, tiles))
-        lbls = lbls.reshape((len(lbls) // tiles, tiles))
-        prob = prob / prob.sum(1, keepdim=True)
-        return prob, lbls, tiles
+    def load_model(self, path):
+        self.model.load_state_dict(torch.load(path))
 
+        
+    def train(self, epochs):
+        return
 
-    def eval(self, model, optimizer, criterion, batch_sampler, data,
-             n_nghs, beta, mode):
+    def test(self):
+        return
 
-        start_time = time.time()
-        ap, auc, m_loss = [], [], []
-        memory_backup = None
-        batch_sampler.reset()
+if __name__ == '__main__':
+    args = utils.get_args()
+    logger = utils.get_logger(args.prefix+"_"+args.data+"_bs"+str(args.bs))
 
-        if mode == 'train':
-            model = model.train()
-            optimizer.zero_grad()
-            while True:
-
-                batches, counts, classes = batch_sampler.get_batch_index()
-                if counts is None or counts.sum()==0:
-                    break
-                prob, lbls, tiles = self.__eval_loop(model, batches, counts,
-                                                     classes, data, n_nghs)
-                
-                with torch.no_grad():
-                    lbl = torch.from_numpy(lbls).type(torch.float).to(model.device)
-
-                loss = criterion(prob, lbl)
-                loss += beta * model.affinity_score.reg_loss()
-
-                loss.bachward()
-                optimizer.step()
-                with torch.no_grad():
-                    model = model.eval()
-                    prob = prob.reshape(len(prob) * tiles)
-                    lbls = lbls.reshape(len(lbls) * tiles)
-                    _ap, _auc = self.evaluate_score(lbls, prob)
-                    ap.append(_ap)
-                    auc.append(_auc)
-                    m_loss.append(loss.item())
-
-                model.memory.detach_memory()
-            memory_backup = model.memory.backup_memory()
-        if mode == 'test':
-            with torch.no_grad():
-                model = model.eval()
-                while True:
-                    prob, lbls, tiles = self.__eval_loop(model, batches, counts,
-                                                         classes, data, n_nghs)
-                    _ap, _auc = self.evaluate_score(lbls, prob)
-                    ap.append(_ap)
-                    auc.append(_auc)
-        end_time = time.time()
-        return ap, auc, m_loss, memory_backup, end_time - start_time
-            
-
-    # def optimize(self):
-
-
-    def evaluate_score(self, labels, prob):
-        pred_score = np.array((prob).cpu().detach().numpy())
-
-        auc = roc_auc_score(labels, pred_score)
-        ap = average_precision_score(labels, pred_score)
-        return ap, auc
+    driver = Driver(args, logger)
+    auc_l, ap_l, loss_l = driver.train()
