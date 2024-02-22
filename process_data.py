@@ -33,7 +33,7 @@ home = df.loc[df['side'] == 'Blue', ['teamid', 'gameid', 'result', 'ts', 'gamele
 away = df.loc[df['side'] == 'Red', ['teamid', 'gameid']].dropna().drop_duplicates()
 
 matches = home.merge(away, how='inner', on='gameid')
-players = df.loc[df['gameid'].isin(matches['gameid'].unique()), ['teamid', 'playerid', 'ts']].dropna().drop_duplicates()
+players = df.loc[df['gameid'].isin(matches['gameid'].unique()), ['teamid', 'playerid', 'ts', 'gameid']].dropna().drop_duplicates()
 homefeat = df.loc[df['side'] == 'Blue', ['teamid', 'gameid', 'result', 'ts', 'gamelength'] + team_cols].dropna().drop_duplicates()
 awayfeat = df.loc[df['side'] == 'Red', ['teamid', 'gameid']].dropna().drop_duplicates()
 matchesfeat = homefeat.merge(awayfeat, how='inner', on='gameid')
@@ -45,7 +45,7 @@ matches = (matches
            .assign(e_type = lambda _d: _d['e_type'] + 1)
            .assign(u_type = 1)
            .assign(v_type = 1)
-           [['u', 'v', 'ts', 'e_type', 'u_type', 'v_type']]
+           [['u', 'v', 'ts', 'e_type', 'u_type', 'v_type', 'gameid']]
            .reset_index(drop=True))
 
 players = (players
@@ -61,7 +61,7 @@ matchesfeat = (matchesfeat
                .assign(e_type = 4)
                .assign(u_type = 1)
                .assign(v_type = 1)
-               .drop(columns=['gameid', 'gamelength'])
+               .drop(columns=['gamelength'])
                .reset_index(drop=True))
 
 playersfeat = (playersfeat
@@ -88,7 +88,7 @@ for name_type in ['team', 'player']:
     curr_df['long_' + name_type] = curr_df.index
     curr_df = curr_df.rename(columns={0: currNum})
     if isTeam:
-        right_df = matchesfeat.loc[:, ['u'] + TEAM_COL_APPEND].drop_duplicates()
+        right_df = matchesfeat.loc[:, ['u', 'gameid'] + TEAM_COL_APPEND].drop_duplicates()
     else:
         right_df = playersfeat.loc[:, ['v'] + PLAYER_COL_APPEND].drop_duplicates(subset='v')
     curr_df = pd.merge(curr_df, right_df, how='left', left_on='long_' + name_type, right_on='u' if isTeam else 'v')
@@ -146,9 +146,13 @@ NUM_N_TYPE = 2
 NUM_E_TYPE = 4
 CLASSES = [1, 2]
 
-events = (events
+events_with_gameid = (events
           .assign(e_idx = np.arange(1, NUM_EV + 1))
-          [['u', 'v', 'u_type', 'v_type', 'e_type', 'ts', 'e_idx']])
+          [['u', 'v', 'u_type', 'v_type', 'e_type', 'ts', 'e_idx', 'gameid']])
+events = events_with_gameid.drop('gameid', axis=1)
+events_with_gameid = events_with_gameid.drop(events_with_gameid[events_with_gameid['gameid'] == 0].index)
+
+events_with_gameid.to_csv(f'{OUT_DIR}/events_with_gameid.csv')
 
 print("num node:", NUM_NODE)
 print("num events:", NUM_EV)
