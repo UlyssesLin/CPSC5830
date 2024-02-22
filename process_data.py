@@ -33,7 +33,13 @@ home = df.loc[df['side'] == 'Blue', ['teamid', 'gameid', 'result', 'ts', 'gamele
 away = df.loc[df['side'] == 'Red', ['teamid', 'gameid']].dropna().drop_duplicates()
 
 matches = home.merge(away, how='inner', on='gameid')
+<<<<<<< HEAD
 players = df.loc[df['gameid'].isin(matches['gameid'].unique()), ['teamid', 'playerid', 'ts', 'gameid']].dropna().drop_duplicates()
+=======
+matches = matches.loc[matches['teamid_x'] != matches['teamid_y']]
+players = df.loc[df['gameid'].isin(matches['gameid'].unique()), ['teamid', 'playerid', 'ts']].dropna().drop_duplicates()
+
+>>>>>>> bfd4f56af07dc5ee4f80c4c5e180eb4b0c4385d9
 homefeat = df.loc[df['side'] == 'Blue', ['teamid', 'gameid', 'result', 'ts', 'gamelength'] + team_cols].dropna().drop_duplicates()
 awayfeat = df.loc[df['side'] == 'Red', ['teamid', 'gameid']].dropna().drop_duplicates()
 matchesfeat = homefeat.merge(awayfeat, how='inner', on='gameid')

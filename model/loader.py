@@ -115,27 +115,27 @@ def split_data_train_test(g: TemHetGraphData, test_ratio=0.2):
 
     return train, test
 
-def split_data_train_test_val(g: TemHetGraphData, test_ratio=0.25, val_ratio=0.25):
-    test_time = np.quantile(g.ts_l, 1. - (test_ratio + val_ratio))
-    val_time = np.quantile(g.ts_l, 1. - val_ratio)
+def split_data_train_test_val(g: TemHetGraphData, val_ratio=0.25, test_ratio=0.25):
+    val_time = np.quantile(g.ts_l, 1. - (test_ratio + val_ratio))
+    test_time = np.quantile(g.ts_l, 1. - val_ratio)
 
     ''' train '''
-    valid_train_flag = g.ts_l < test_time
+    valid_train_flag = g.ts_l < val_time
     train = g.sample_by_mask(valid_train_flag)
 
-    ''' test '''
-    valid_test_flag = (val_time > g.ts_l) & (g.ts_l >= test_time)  # total test edges
-    test = g.sample_by_mask(valid_test_flag)
-
     ''' val '''
-    valid_val_flag = g.ts_l >= val_time  # total val edges
+    valid_val_flag = (test_time > g.ts_l) & (g.ts_l >= val_time)  # total test edges
     val = g.sample_by_mask(valid_val_flag)
 
-    '''g_test'''
-    valid_g_test_flag = g.ts_l < val_time
-    g_test = g.sample_by_mask(valid_g_test_flag)
+    ''' val '''
+    valid_test_flag = g.ts_l >= test_time  # total val edges
+    test = g.sample_by_mask(valid_test_flag)
 
-    return g_test, train, test, val
+    '''g_test'''
+    valid_g_val_flag = g.ts_l < test_time
+    g_val = g.sample_by_mask(valid_g_val_flag)
+
+    return g_val, train, val, test
 
 # mask 10% node
 def split_valid_train_nn_test(g: TemHetGraphData, train: TemHetGraphData, test: TemHetGraphData, mask_ratio=0.1):
@@ -161,10 +161,10 @@ def load_and_split_data_train_test(dataset:str, n_dim=None, e_dim=None, ratio=0.
     train, test = split_data_train_test(g, ratio)
     return g, train, test
 
-def load_and_split_data_train_test_val(dataset:str, n_dim=None, e_dim=None, test_ratio=0.25, val_ratio=0.25):
+def load_and_split_data_train_test_val(dataset:str, n_dim=None, e_dim=None, val_ratio=0.25, test_ratio=0.25):
     g, classes = load_data(dataset, n_dim, e_dim)
-    g_test, train, test, val = split_data_train_test_val(g, test_ratio, val_ratio)
-    return g, g_test, train, test, val, classes
+    g_val, train, val, test = split_data_train_test_val(g, val_ratio, test_ratio)
+    return g, g_val, train, val, test, classes
 
 
 """ neighbor finder """
