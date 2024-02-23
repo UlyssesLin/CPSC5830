@@ -33,18 +33,14 @@ home = df.loc[df['side'] == 'Blue', ['teamid', 'gameid', 'result', 'ts', 'gamele
 away = df.loc[df['side'] == 'Red', ['teamid', 'gameid']].dropna().drop_duplicates()
 
 matches = home.merge(away, how='inner', on='gameid')
-<<<<<<< HEAD
-players = df.loc[df['gameid'].isin(matches['gameid'].unique()), ['teamid', 'playerid', 'ts', 'gameid']].dropna().drop_duplicates()
-=======
 matches = matches.loc[matches['teamid_x'] != matches['teamid_y']]
-players = df.loc[df['gameid'].isin(matches['gameid'].unique()), ['teamid', 'playerid', 'ts']].dropna().drop_duplicates()
-
->>>>>>> bfd4f56af07dc5ee4f80c4c5e180eb4b0c4385d9
+players = df.loc[df['gameid'].isin(matches['gameid'].unique()), ['teamid', 'playerid', 'ts', 'gameid']].dropna().drop_duplicates()
 homefeat = df.loc[df['side'] == 'Blue', ['teamid', 'gameid', 'result', 'ts', 'gamelength'] + team_cols].dropna().drop_duplicates()
 awayfeat = df.loc[df['side'] == 'Red', ['teamid', 'gameid']].dropna().drop_duplicates()
 matchesfeat = homefeat.merge(awayfeat, how='inner', on='gameid')
-playersfeat = df.loc[df['gameid'].isin(matchesfeat['gameid'].unique()), ['teamid', 'playerid', 'ts', 'gamelength'] + player_cols].dropna().drop_duplicates()
-
+playersfeat = df.loc[df['gameid'].isin(matchesfeat['gameid'].unique()), ['teamid', 'playerid', 'ts', 'gamelength', 'gameid'] + player_cols].dropna().drop_duplicates()
+print('playersfeat:')
+print(playersfeat.columns)
 matches = (matches
            .assign(ts = lambda _d: _d['ts'] + 1)
            .rename(columns={'teamid_x': 'u', 'teamid_y': 'v', 'result': 'e_type'})
@@ -96,7 +92,7 @@ for name_type in ['team', 'player']:
     if isTeam:
         right_df = matchesfeat.loc[:, ['u', 'gameid'] + TEAM_COL_APPEND].drop_duplicates()
     else:
-        right_df = playersfeat.loc[:, ['v'] + PLAYER_COL_APPEND].drop_duplicates(subset='v')
+        right_df = playersfeat.loc[:, ['v', 'gameid'] + PLAYER_COL_APPEND].drop_duplicates(subset='v')
     curr_df = pd.merge(curr_df, right_df, how='left', left_on='long_' + name_type, right_on='u' if isTeam else 'v')
     curr_df = curr_df.loc[:, ['long_' + name_type, currNum, currName]].drop_duplicates()
     curr_df[currName] = curr_df[currName].fillna('No Name')
@@ -156,7 +152,8 @@ events_with_gameid = (events
           .assign(e_idx = np.arange(1, NUM_EV + 1))
           [['u', 'v', 'u_type', 'v_type', 'e_type', 'ts', 'e_idx', 'gameid']])
 events = events_with_gameid.drop('gameid', axis=1)
-events_with_gameid = events_with_gameid.drop(events_with_gameid[events_with_gameid['gameid'] == 0].index)
+print(events_with_gameid.shape)
+# events_with_gameid = events_with_gameid.drop(events_with_gameid[events_with_gameid['gameid'] == 0].index)
 
 events_with_gameid.to_csv(f'{OUT_DIR}/events_with_gameid.csv')
 
