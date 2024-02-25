@@ -15,10 +15,10 @@ import pyvis
 #     Optionally cap the number of edges to show with MAX_EVENT_DISPLAY
 # Set TIMESTAMP_START and TIMESTAMP_END to display all nodes and edges in a certain time window
 
-FOCUS_MATCH = 'ESPORTSTMNT01/1641087' # Match to focus on
+# FOCUS_MATCH = 'ESPORTSTMNT01/1641087' # Match to focus on
 # FOCUS_MATCH = None
-# MAX_EVENT_DISPLAY = 150 # custom number of neighbors to display; not impactful if FOCUS_MATCH set
-MAX_EVENT_DISPLAY = None
+MAX_EVENT_DISPLAY = 50 # custom number of neighbors to display; not impactful if FOCUS_MATCH set
+# MAX_EVENT_DISPLAY = None
 TEAM_NODE_A = 1740 # home team node to focus on and see neighbors of
 TEAM_NODE_B = 1455 # away team node to focus on and see neighbors of
 # Earliest timestamp: 2014-01-14 17:52:02
@@ -56,6 +56,7 @@ df['ts'] = pd.to_datetime(df['ts'], unit='s')
 
 
 def createGraph(teamA, teamB):
+    print('=================CREATING GRAPH')
     focusNodes = [
         {
             'name': teamA,
@@ -237,7 +238,7 @@ def createGraph(teamA, teamB):
 
         net.options=options
 
-        net.show('test1.html', notebook=False, ) # do NOT remove the notebook=False
+        # net.show('test1.html', notebook=False, ) # do NOT remove the notebook=False
 
 ###-------------------------------------------------------------------------------
 
@@ -252,55 +253,103 @@ styl = f"""
     </style>
     """
 st.markdown(styl, unsafe_allow_html=True)
-
 st.title('League of Legends')
 st.sidebar.title('Choose a focus method:')
+useDemo = st.sidebar.button('Use Demo Teams')
 mainOption = st.sidebar.selectbox('Select one:', ('With 2 teams', 'Time window', 'By match', 'Node adjacency'))
 
+if useDemo:
+    st.sidebar.text('Demo Teams:\nNongshim RedForce Academy (Home)\nDRX Academy (Away)')
+    teamAOption = 'Fnatic --- Team: 827'
+    teamBOption = 'Gambit Gaming --- Team: 391'
+
+# chosenTeamMatch = ''
+# chosenTeamMatch = st.sidebar.empty()
+
 if mainOption == 'With 2 teams':
-    dfLolTeams = pd.read_csv('data/processed/lol/teams_with_names.csv')
-    dfLolTeams = dfLolTeams.sort_values('teamname')
-    dfLolTeams['displayname'] = dfLolTeams['teamname'] + ' --- Team: ' + dfLolTeams['team_num'].astype(str)
-    listLolTeams = dfLolTeams['displayname'].tolist()
-    teamAOption = st.sidebar.selectbox('Team A:', listLolTeams, key='teamA')
-    teamBOption = st.sidebar.selectbox('Team B:', listLolTeams, key='teamB')
-    useDemo = st.sidebar.button('Use Demo Teams')
-    if useDemo:
-        st.sidebar.text('Demo Teams:\nNongshim RedForce Academy (Home)\nDRX Academy (Away)')
-        teamAOption = 'Nongshim RedForce Academy --- Team: 1740'
-        teamBOption = 'DRX Academy --- Team: 1455'
+    with st.sidebar.form(key='my_form'):
+        dfLolTeams = pd.read_csv('data/processed/lol/teams_with_names.csv')
+        dfLolTeams = dfLolTeams.sort_values('teamname')
+        dfLolTeams['displayname'] = dfLolTeams['teamname'] + ' --- Team: ' + dfLolTeams['team_num'].astype(str)
+        listLolTeams = dfLolTeams['displayname'].tolist()
 
-    if teamAOption and teamBOption and teamAOption != teamBOption:
-        teamAOption = int(teamAOption.split(' --- Team: ')[1])
-        teamBOption = int(teamBOption.split(' --- Team: ')[1])
-        print(teamAOption)
-        print(teamBOption)
+        # st.empty() workaround for updating fields before submitting
+        placeholder_Team_A_component = st.empty()
+        placeholder_Team_A_react = st.empty()
+        placeholder_Team_B_component = st.empty()
+        placeholder_Team_B_react = st.empty()
+        placeholder_toggle = st.empty()
+        placeholder_toggle_react = st.empty()
+        placeholder_match_component = st.empty()
+        placeholder_match_react = st.empty()
 
-        # Print earliest and latest timestamps for teams A and B
-        if teamAOption and teamBOption:
-            teams_df = df.loc[(df['u'] == teamAOption) | (df['v'] == teamBOption)]
-            # print(teams_df.head())
-            print('TEAM A AND B\'S EARLIEST TIMESTAMP: ' + str(teams_df['ts'].min()))
-            print('                    MAX TIMESTAMP: ' + str(teams_df['ts'].max()))
-            dfGames = df.loc[(df['u'].isin([teamAOption, teamBOption])) & (df['v'].isin([teamAOption, teamBOption])) & (df['e_type'].isin([1, 2]))] # should be sorted by date
-            listGames = list(dfGames[['u', 'v', 'ts', 'gameid']].itertuples(index=False))
-            listChosenTeamMatches = []
-            for game in listGames:
-                listChosenTeamMatches.append(game[3] + ' : ' + str(game[2]) + ' : ' + str(game[0]) + ' (H) vs ' + str(game[1]) + ' (A)')
-            st.sidebar.selectbox('Choose one from ' + str(len(listChosenTeamMatches)) + ' matches (optional):', listChosenTeamMatches, key='chosenTeamMatch')
-
-        # Time window selection
-        if TIMESTAMP_START and TIMESTAMP_END:
-            df = df.loc[(df['ts'] >= TIMESTAMP_START) & (df['ts'] <= TIMESTAMP_END)]
-            print('SELECTING TIME WINDOW BETWEEN ' + str(TIMESTAMP_START) + ' AND ' + str(TIMESTAMP_END))
-
-        # Enable to display a single match
-        if FOCUS_MATCH:
-            df = df.loc[(df['gameid'] == FOCUS_MATCH)]
+        teamAOption=''
+        teamBOption=''
+        chosenTeamMatch=''
+        listChosenTeamMatches = ['No selection']
         
-        createGraph(teamAOption, teamBOption)
+        submit_button = st.form_submit_button(label='Submit')
 
-    HtmlFile = open('test1.html', 'r', encoding='utf-8')
-    source_code = HtmlFile.read() 
-    components.html(source_code, height=1600, width=1502)
+    with placeholder_Team_A_component:
+        teamAOption = st.selectbox('Team A:', listLolTeams, key='teamA')
+
+    with placeholder_Team_A_react:
+        print('Team A selected')
+
+    with placeholder_Team_B_component:
+        teamBOption = st.selectbox('Team B:', listLolTeams, key='teamB')
+
+    with placeholder_Team_B_react:
+        print('Team B selected')
+
+    with placeholder_match_component:
+        print('placeholder_match_component')
+        truncTeamA = int(teamAOption.split(' --- Team: ')[1])
+        truncTeamB = int(teamBOption.split(' --- Team: ')[1])
+        print('team A: ' + str(truncTeamA))
+        print('team B: ' + str(truncTeamB))
+        teams_df = df.loc[(df['u'] == truncTeamA) | (df['v'] == truncTeamB)]
+        dfGames = df.loc[(df['u'].isin([truncTeamA, truncTeamB])) & (df['v'].isin([truncTeamA, truncTeamB])) & (df['e_type'].isin([1, 2]))] # should be sorted by date
+        listGames = list(dfGames[['u', 'v', 'ts', 'gameid']].itertuples(index=False))
+        listChosenTeamMatches = ['No selection']
+        for game in listGames:
+            listChosenTeamMatches.append(game[3] + ' : ' + str(game[2]) + ' : ' + str(game[0]) + ' (H) vs ' + str(game[1]) + ' (A)')
+        chosenTeamMatch = st.selectbox('(Optional) Choose a match between those teams:', options=listChosenTeamMatches, key='chosenTeamMatch')
+
+    with placeholder_match_react:
+        print('Chosen teams match')
+        if chosenTeamMatch == 'No selection':
+            print('No selection')
+
+    # TODO: Time window
+    # Print earliest and latest timestamps for teams A and B
+                
+    # Enable to display a single match
+    # if chosenTeamMatch:
+    #     print('INSIDE NO MATCH')
+    #     df = df.loc[(df['gameid'] == chosenTeamMatch.split(': ')[0])]
+    #     print(df)
+
+    #     # Time window selection
+    #     # if TIMESTAMP_START and TIMESTAMP_END:
+    #     #     df = df.loc[(df['ts'] >= TIMESTAMP_START) & (df['ts'] <= TIMESTAMP_END)]
+    #     #     print('SELECTING TIME WINDOW BETWEEN ' + str(TIMESTAMP_START) + ' AND ' + str(TIMESTAMP_END))
+            
+    with st.sidebar:
+        if submit_button:
+            print('--------------USER SUBMITTED 2 TEAMS FORM--------------')
+            print(teamAOption)
+            print(teamBOption)
+            print(chosenTeamMatch)
+        #     createGraph(teamAOption, teamBOption)
+
+    if mainOption == 'Time window':
+        print('Time window!')
+        
+
+
+
+    # HtmlFile = open('test1.html', 'r', encoding='utf-8')
+    # source_code = HtmlFile.read() 
+    # components.html(source_code, height=1600, width=1502)
 
