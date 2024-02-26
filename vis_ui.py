@@ -11,8 +11,10 @@ import pyvis
 
 # TODO: Explain UI usage in README
 # FOCUS_MATCH = 'ESPORTSTMNT01/1641087' # Match to focus on
-MAX_EVENT_DISPLAY = 50 # custom number of neighbors to display; not impactful if FOCUS_MATCH set
+# MAX_EVENT_DISPLAY = 50 # custom number of neighbors to display; not impactful if FOCUS_MATCH set
 # MAX_EVENT_DISPLAY = None
+MAX_EVENTS_TEAMS = 120 # Capped events to display, for ease of viewing - for 2 teams method
+MAX_EVENTS_ADJ = 80 # For node adjacency method
 # Earliest timestamp: 2014-01-14 17:52:02
 # Latest timestamp: 2023-11-20 20:40:26
 IFRAME_DIM = 1105 # Width and height of iframe for graph
@@ -23,6 +25,7 @@ IFRAME_DIM = 1105 # Width and height of iframe for graph
 
 ### GRAPH CREATION SECTION
 
+# Prepare the dataframe for the graph
 df = pd.read_csv('data/processed/lol/events_with_gameid.csv')
 dfLolTeams = pd.read_csv('data/processed/lol/teams_with_names.csv')
 dfLolPlayers = pd.read_csv('data/processed/lol/players_with_names.csv')
@@ -48,20 +51,29 @@ df['ts'] = pd.to_datetime(df['ts'], unit='s')
 
 
 # Create graph after getting input from Streamlit UI
-def createGraph(teamA, teamB):
+def createGraph(teamA, teamB, nodeType, findAdj, maxEventDisplay):
     print('=================CREATING GRAPH=================')
-    focusNodes = [
-        {
-            'name': teamA,
-            'nodeList': [],
-            'edgeList': []
-        },
-        {
-            'name': teamB,
-            'nodeList': [],
-            'edgeList': []
-        }
-    ]
+    if nodeType and findAdj:
+        focusNodes = [
+            {
+                'name': findAdj,
+                'nodeList': [],
+                'edgeList': []
+            }
+        ]
+    elif teamA and teamB:
+        focusNodes = [
+            {
+                'name': teamA,
+                'nodeList': [],
+                'edgeList': []
+            },
+            {
+                'name': teamB,
+                'nodeList': [],
+                'edgeList': []
+            }
+        ]
 
     nodeLabelMapper = {
         1: '  Team:  \n',
@@ -123,10 +135,16 @@ def createGraph(teamA, teamB):
             return 18 if len(text) < 20 else 14
 
     for focusNode in focusNodes:
-        if MAX_EVENT_DISPLAY:
-            selectedTeam = df.loc[df['u'] == focusNode['name'], ['u', 'v', 'u_type', 'v_type', 'e_type', 'u_name', 'v_name', 'ts']].head(MAX_EVENT_DISPLAY)
-        else:
-            selectedTeam = df.loc[df['u'] == focusNode['name'], ['u', 'v', 'u_type', 'v_type', 'e_type', 'u_name', 'v_name', 'ts']]
+        if (nodeType == 'team') or (teamA and teamB):
+            selectedTeam = df.loc[
+                (df['u'] == focusNode['name']) | ((df['v'] == focusNode['name']) & (df['v_type'] == 1)),
+                ['u', 'v', 'u_type', 'v_type', 'e_type', 'u_name', 'v_name', 'ts']]
+        elif nodeType == 'player':
+            selectedTeam = df.loc[
+                (df['v'] == focusNode['name']) & (df['v_type'] == 2),
+                ['u', 'v', 'u_type', 'v_type', 'e_type', 'u_name', 'v_name', 'ts']]
+        if maxEventDisplay:
+            selectedTeam = selectedTeam.head(maxEventDisplay)
         teamTypeDF = selectedTeam.drop_duplicates()
         us = list(teamTypeDF[['u', 'u_type', 'u_name', 'ts']].itertuples(index=False, name=None))
         vs = list(teamTypeDF[['v', 'v_type', 'v_name', 'ts']].itertuples(index=False, name=None))
@@ -186,8 +204,8 @@ def createGraph(teamA, teamB):
             4: 1
         }
 
-        allNodesList = focusNodes[0]['nodeList'] + focusNodes[1]['nodeList']
-        allEdgesList = focusNodes[0]['edgeList'] + focusNodes[1]['edgeList']
+        allNodesList = focusNodes[0]['nodeList'] + ([] if findAdj else focusNodes[1]['nodeList'])
+        allEdgesList = focusNodes[0]['edgeList'] + ([] if findAdj else focusNodes[1]['edgeList'])
 
         focusGraph.add_nodes_from(allNodesList)
         focusGraph.add_edges_from(allEdgesList)
@@ -211,9 +229,9 @@ def createGraph(teamA, teamB):
         options = {
             # 'physics':{ # physics very distracting with large/non-capped number of edges, even with just 2 teams
             #     'barnesHut':{
-            #         'gravitationalConstant':-15000, # seemingly best around -15000
+            #         'gravitationalConstant': -15000, # seemingly best around -15000
             #         'centralGravity': 5, # seemingly best at 5
-            #         'springLength': 200,
+            #         'springLength': 250 if (teamA and teamB) else 400 if nodeType == 'team' else 600,
             #         'springConstant': 0.7,
             #         'damping': 3,
             #         'avoidOverlap': 0 # higher vals push nodes away from each other actively
@@ -227,6 +245,17 @@ def createGraph(teamA, teamB):
                 'arrowStrikethrough': False
             }
         }
+        if nodeType == 'player':
+            options['physics'] = { # physics should be added with 'player' otherwise there is not enough edge length
+                'barnesHut':{
+                    'gravitationalConstant': -15000, # seemingly best around -15000
+                    'centralGravity': 5, # seemingly best at 5
+                    'springLength': 250 if (teamA and teamB) else 400 if nodeType == 'team' else 600,
+                    'springConstant': 0.7,
+                    'damping': 3,
+                    'avoidOverlap': 0 # higher vals push nodes away from each other actively
+                }
+            }
 
         net.options=options
 
@@ -387,7 +416,7 @@ if mainOption == 'With 2 teams':
                 df = df.loc[(df['ts'] >= time_X_text) & (df['ts'] <= time_Y_text)]
                 print('SELECTING TIME WINDOW BETWEEN ' + str(time_X_text) + ' AND ' + str(time_Y_text))
 
-            createGraph(truncTeamA, truncTeamB)
+            createGraph(truncTeamA, truncTeamB, None, None, MAX_EVENTS_TEAMS)
             df = dfOriginal # reset - after submit and show graph
             renderGraph()
         else:
@@ -437,10 +466,10 @@ if mainOption == 'Node adjacency':
 
         if adjNodeType and (adjNodeText or adjNodeSelection != 'No selection'):
             print('--------------USER SUBMITTED NODE ADJACENCY FORM--------------')
-            dfOriginal = df
+            # dfOriginal = df
             print('<' + adjNodeType + '> type node, number: ' + str(adjNode))
-            # createGraph(truncTeamA, truncTeamB)
-            df = dfOriginal # reset - after submit and show graph
-            # renderGraph()
+            createGraph(None, None, adjNodeType, adjNode, MAX_EVENTS_ADJ)
+            # df = dfOriginal # reset - after submit and show graph
+            renderGraph()
         else:
             print('--------------FAILED NODE ADJACENCY FORM--------------')
