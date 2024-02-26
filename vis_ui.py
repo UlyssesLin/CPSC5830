@@ -9,26 +9,18 @@ import numpy as np
 from pyvis.network import Network
 import pyvis
 
-### Ways to filter the display of the graph
-# Set FOCUS_MATCH to a single match name - shows competing teams and associated players for that match only
-# Set TEAM_NODE_A and TEAM_NODE_B to two teams you want to see neighborhood connections of
-#     Optionally cap the number of edges to show with MAX_EVENT_DISPLAY
-# Set TIMESTAMP_START and TIMESTAMP_END to display all nodes and edges in a certain time window
-
+# TODO: Explain UI usage in README
 # FOCUS_MATCH = 'ESPORTSTMNT01/1641087' # Match to focus on
-# FOCUS_MATCH = None
 MAX_EVENT_DISPLAY = 50 # custom number of neighbors to display; not impactful if FOCUS_MATCH set
 # MAX_EVENT_DISPLAY = None
-TEAM_NODE_A = 1740 # home team node to focus on and see neighbors of
-TEAM_NODE_B = 1455 # away team node to focus on and see neighbors of
 # Earliest timestamp: 2014-01-14 17:52:02
 # Latest timestamp: 2023-11-20 20:40:26
-# TIMESTAMP_START = np.datetime64('2023-11-20 19:59:21')
-# TIMESTAMP_END = np.datetime64('2023-11-20 19:59:22')
-TIMESTAMP_START = None
-TIMESTAMP_END = None
+
 
 ### ----------------------------------------------------
+
+
+### GRAPH CREATION SECTION
 
 df = pd.read_csv('data/processed/lol/events_with_gameid.csv')
 dfLolTeams = pd.read_csv('data/processed/lol/teams_with_names.csv')
@@ -54,9 +46,9 @@ df = df_recombined.sort_values('e_idx')
 df['ts'] = pd.to_datetime(df['ts'], unit='s')
 
 
-
+# Create graph after getting input from Streamlit UI
 def createGraph(teamA, teamB):
-    print('=================CREATING GRAPH')
+    print('=================CREATING GRAPH=================')
     focusNodes = [
         {
             'name': teamA,
@@ -204,7 +196,6 @@ def createGraph(teamA, teamB):
             'arrowsize': list(arrowSizeMapper[edge_type] for u, v, edge_type in list(focusGraph.edges(data='edge_type')))
         }
 
-
         net = Network(
             '1500px', '1500px',
             directed=True,
@@ -238,10 +229,14 @@ def createGraph(teamA, teamB):
 
         net.options=options
 
-        # net.show('test1.html', notebook=False, ) # do NOT remove the notebook=False
+        net.show('test1.html', notebook=False, ) # do NOT remove the notebook=False
+
 
 ###-------------------------------------------------------------------------------
 
+
+### STREAMLIT UI SECTION
+        
 styl = f"""
     <style>
         .st-emotion-cache-1y4p8pa{{
@@ -252,6 +247,12 @@ styl = f"""
         }}
     </style>
     """
+
+def renderGraph():
+    HtmlFile = open('test1.html', 'r', encoding='utf-8')
+    source_code = HtmlFile.read() 
+    components.html(source_code, height=1502, width=1502)
+
 st.markdown(styl, unsafe_allow_html=True)
 st.title('League of Legends')
 demoCol1, demoCol2 = st.sidebar.columns(2)
@@ -306,6 +307,8 @@ if mainOption == 'With 2 teams':
 
         teamAOption=''
         teamBOption=''
+        truncTeamA=''
+        truncTeamB=''
         chosenTeamMatch=''
         listChosenTeamMatches = ['No selection']
         
@@ -362,35 +365,38 @@ if mainOption == 'With 2 teams':
         if chosenTeamMatch == 'No selection':
             print('No selection')
 
-    with st.sidebar:
-        if submit_button:
+    # with st.sidebar:
+    if submit_button:
+        if truncTeamA and truncTeamB:
             dfOriginal = df
             print('--------------USER SUBMITTED 2 TEAMS FORM--------------')
-            print(truncTeamA)
-            print(truncTeamB)
-            print(chosenTeamMatch)
-            print(time_X_text)
-            print(time_Y_text)
+            print('TEAM A: ' + str(truncTeamA))
+            print('TEAM B: ' + str(truncTeamB))
 
             # Time window selection
             if chosenTeamMatch != 'No selection':
                 chosenTeamMatch = chosenTeamMatch.split(' : ')[0]
+                print('Selected match: ' + str(chosenTeamMatch))
+                df = df.loc[(df['gameid'] == chosenTeamMatch)]
             elif time_X_text and time_Y_text:
+                print('Inputed time window: ' + str(time_X_text) + ' --> ' + str(time_Y_text))
                 time_X_text = np.datetime64(time_X_text)
                 time_Y_text = np.datetime64(time_Y_text)
                 df = df.loc[(df['ts'] >= time_X_text) & (df['ts'] <= time_Y_text)]
                 print('SELECTING TIME WINDOW BETWEEN ' + str(time_X_text) + ' AND ' + str(time_Y_text))
 
-        #     createGraph(teamAOption, teamBOption)
+            createGraph(truncTeamA, truncTeamB)
             df = dfOriginal # reset - after submit and show graph
+            renderGraph()
+        else:
+            print('--------------TEAMS NOT CHOSEN--------------')
 
-    if mainOption == 'Time window':
-        print('Time window!')
+            
+
+    if mainOption == 'Node adjacency':
+        print('Node adjacency!')
         
 
 
 
-    # HtmlFile = open('test1.html', 'r', encoding='utf-8')
-    # source_code = HtmlFile.read() 
-    # components.html(source_code, height=1600, width=1502)
 
