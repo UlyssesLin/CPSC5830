@@ -15,6 +15,7 @@ MAX_EVENT_DISPLAY = 50 # custom number of neighbors to display; not impactful if
 # MAX_EVENT_DISPLAY = None
 # Earliest timestamp: 2014-01-14 17:52:02
 # Latest timestamp: 2023-11-20 20:40:26
+IFRAME_DIM = 1105 # Width and height of iframe for graph
 
 
 ### ----------------------------------------------------
@@ -197,7 +198,7 @@ def createGraph(teamA, teamB):
         }
 
         net = Network(
-            '1500px', '1500px',
+            '1000px', '1000px',
             directed=True,
             # heading='League of Legends',
             # select_menu=True,
@@ -229,7 +230,8 @@ def createGraph(teamA, teamB):
 
         net.options=options
 
-        net.show('test1.html', notebook=False, ) # do NOT remove the notebook=False
+        # net.show('LolGraph.html', notebook=False, ) # Renders to html file and opens in Chrome; do NOT remove the notebook=False
+        net.save_graph('LolGraph.html')
 
 
 ###-------------------------------------------------------------------------------
@@ -249,9 +251,9 @@ styl = f"""
     """
 
 def renderGraph():
-    HtmlFile = open('test1.html', 'r', encoding='utf-8')
+    HtmlFile = open('LolGraph.html', 'r', encoding='utf-8')
     source_code = HtmlFile.read() 
-    components.html(source_code, height=1502, width=1502)
+    components.html(source_code, height=IFRAME_DIM, width=IFRAME_DIM-103)
 
 st.markdown(styl, unsafe_allow_html=True)
 st.title('League of Legends')
