@@ -393,12 +393,54 @@ if mainOption == 'With 2 teams':
         else:
             print('--------------TEAMS NOT CHOSEN--------------')
 
-            
 
-    if mainOption == 'Node adjacency':
-        print('Node adjacency!')
+
+if mainOption == 'Node adjacency':
+    with st.sidebar.form(key='my_form2'):
+        st.title('Select the type of node:')
+        # st.empty() workaround for updating fields before submitting
+        # Order here determines order of components on page
+        placeholder_node_typ_component = st.empty()
+        placeholder_node_typ_react = st.empty()
+        st.divider()
+        st.subheader('Then choose a node:')
+        placeholder_node_list_component = st.empty()
+        adjNodeText = st.text_input('Or, input a node number (after choosing a type):')
+
+        submit_button = st.form_submit_button(label='Submit')
+
+        nodesList = ['No selection']
+        adjNode = ''
         
+    with placeholder_node_typ_component:
+        adjNodeType = st.selectbox('Select one:', ['Team', 'Player'], key='adjtype')
 
+    with placeholder_node_typ_react:
+        print('Type <' + adjNodeType + '> selected')
+        if adjNodeType == 'Team':
+            adjNodeType = 'team'
+            dfNodesList = pd.read_csv('data/processed/lol/teams_with_names.csv').sort_values('teamname')
+        else:
+            adjNodeType = 'player'
+            dfNodesList = pd.read_csv('data/processed/lol/players_with_names.csv').sort_values('playername')
+        dfNodesList['displayname'] = dfNodesList[adjNodeType + 'name'] + ' --- Number: ' + dfNodesList[adjNodeType + '_num'].astype(str)
+        nodesList = nodesList + dfNodesList['displayname'].tolist()
 
+    with placeholder_node_list_component:
+        adjNodeSelection = st.selectbox('Select a node:', nodesList, key='adjlist')
 
+    if submit_button:
+        if adjNodeText:
+            adjNode = int(adjNodeText)
+        elif adjNodeSelection != 'No selection':
+            adjNode = int(adjNodeSelection.split(' --- Number: ')[1])
 
+        if adjNodeType and (adjNodeText or adjNodeSelection != 'No selection'):
+            print('--------------USER SUBMITTED NODE ADJACENCY FORM--------------')
+            dfOriginal = df
+            print('<' + adjNodeType + '> type node, number: ' + str(adjNode))
+            # createGraph(truncTeamA, truncTeamB)
+            df = dfOriginal # reset - after submit and show graph
+            # renderGraph()
+        else:
+            print('--------------FAILED NODE ADJACENCY FORM--------------')
