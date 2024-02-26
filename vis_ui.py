@@ -254,20 +254,21 @@ styl = f"""
     """
 st.markdown(styl, unsafe_allow_html=True)
 st.title('League of Legends')
-st.sidebar.title('Choose a focus method:')
-useDemo = st.sidebar.button('Use Demo Teams')
-mainOption = st.sidebar.selectbox('Select one:', ('With 2 teams', 'Time window', 'By match', 'Node adjacency'))
+demoCol1, demoCol2 = st.sidebar.columns(2)
+useDemoTeams = demoCol1.button('Demo Teams')
+useDemoTimes = demoCol2.button('Demo Times')
+mainOption = st.sidebar.selectbox('Choose a graph focus method:', ('With 2 teams', 'Node adjacency'))
 
-if useDemo:
+# TODO: Flesh out demos
+if useDemoTeams:
     st.sidebar.text('Demo Teams:\nNongshim RedForce Academy (Home)\nDRX Academy (Away)')
     teamAOption = 'Fnatic --- Team: 827'
     teamBOption = 'Gambit Gaming --- Team: 391'
 
-# chosenTeamMatch = ''
-# chosenTeamMatch = st.sidebar.empty()
-
 if mainOption == 'With 2 teams':
     with st.sidebar.form(key='my_form'):
+        st.title('You may select:')
+        st.markdown('* Two teams\n * OR - Two teams and a match between them\n * OR - Two teams and a time window')
         dfLolTeams = pd.read_csv('data/processed/lol/teams_with_names.csv')
         dfLolTeams = dfLolTeams.sort_values('teamname')
         dfLolTeams['displayname'] = dfLolTeams['teamname'] + ' --- Team: ' + dfLolTeams['team_num'].astype(str)
@@ -291,8 +292,17 @@ if mainOption == 'With 2 teams':
             placeholder_Team_B_text_component = st.empty()
             placeholder_Team_B_text_react = st.empty()
         st.divider()
+        st.subheader('Choose a match between the teams:')
         placeholder_match_component = st.empty()
         placeholder_match_react = st.empty()
+        st.divider()
+        st.subheader('Input a time window (Optional):')
+        st.caption('Time windows are mutually exclusive with match selection; if both are submitted, the graph will filter by match.')
+        time_X_text_col, time_Y_text_col = st.columns(2)
+        with time_X_text_col:
+            time_X_text = st.text_input('Start:')
+        with time_Y_text_col:
+            time_Y_text = st.text_input('End:')
 
         teamAOption=''
         teamBOption=''
@@ -352,27 +362,27 @@ if mainOption == 'With 2 teams':
         if chosenTeamMatch == 'No selection':
             print('No selection')
 
-    # TODO: Time window
-    # Print earliest and latest timestamps for teams A and B
-                
-    # Enable to display a single match
-    # if chosenTeamMatch:
-    #     print('INSIDE NO MATCH')
-    #     df = df.loc[(df['gameid'] == chosenTeamMatch.split(': ')[0])]
-    #     print(df)
-
-    #     # Time window selection
-    #     # if TIMESTAMP_START and TIMESTAMP_END:
-    #     #     df = df.loc[(df['ts'] >= TIMESTAMP_START) & (df['ts'] <= TIMESTAMP_END)]
-    #     #     print('SELECTING TIME WINDOW BETWEEN ' + str(TIMESTAMP_START) + ' AND ' + str(TIMESTAMP_END))
-            
     with st.sidebar:
         if submit_button:
+            dfOriginal = df
             print('--------------USER SUBMITTED 2 TEAMS FORM--------------')
-            print(teamAOption)
-            print(teamBOption)
+            print(truncTeamA)
+            print(truncTeamB)
             print(chosenTeamMatch)
+            print(time_X_text)
+            print(time_Y_text)
+
+            # Time window selection
+            if chosenTeamMatch != 'No selection':
+                chosenTeamMatch = chosenTeamMatch.split(' : ')[0]
+            elif time_X_text and time_Y_text:
+                time_X_text = np.datetime64(time_X_text)
+                time_Y_text = np.datetime64(time_Y_text)
+                df = df.loc[(df['ts'] >= time_X_text) & (df['ts'] <= time_Y_text)]
+                print('SELECTING TIME WINDOW BETWEEN ' + str(time_X_text) + ' AND ' + str(time_Y_text))
+
         #     createGraph(teamAOption, teamBOption)
+            df = dfOriginal # reset - after submit and show graph
 
     if mainOption == 'Time window':
         print('Time window!')
