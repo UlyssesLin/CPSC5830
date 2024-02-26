@@ -271,15 +271,26 @@ if mainOption == 'With 2 teams':
         dfLolTeams = pd.read_csv('data/processed/lol/teams_with_names.csv')
         dfLolTeams = dfLolTeams.sort_values('teamname')
         dfLolTeams['displayname'] = dfLolTeams['teamname'] + ' --- Team: ' + dfLolTeams['team_num'].astype(str)
-        listLolTeams = dfLolTeams['displayname'].tolist()
+        listLolTeams = ['No selection'] + dfLolTeams['displayname'].tolist()
 
         # st.empty() workaround for updating fields before submitting
+        # Order here determines order of components on page
+        st.subheader('Choose the two teams here:')
         placeholder_Team_A_component = st.empty()
         placeholder_Team_A_react = st.empty()
         placeholder_Team_B_component = st.empty()
         placeholder_Team_B_react = st.empty()
         placeholder_toggle = st.empty()
         placeholder_toggle_react = st.empty()
+        st.subheader('Or, input team numbers here:')
+        team_A_text_col, team_B_text_col = st.columns(2)
+        with team_A_text_col:
+            placeholder_Team_A_text_component = st.empty()
+            placeholder_Team_A_text_react = st.empty()
+        with team_B_text_col:
+            placeholder_Team_B_text_component = st.empty()
+            placeholder_Team_B_text_react = st.empty()
+        st.divider()
         placeholder_match_component = st.empty()
         placeholder_match_react = st.empty()
 
@@ -302,18 +313,38 @@ if mainOption == 'With 2 teams':
     with placeholder_Team_B_react:
         print('Team B selected')
 
+    with placeholder_Team_A_text_component:
+        Team_A_text = st.text_input('Team A:')
+
+    with placeholder_Team_A_text_react:
+        print('Team A text inputted')
+
+    with placeholder_Team_B_text_component:
+        Team_B_text = st.text_input('Team B:')
+
+    with placeholder_Team_B_text_react:
+        print('Team B text inputted')
+
     with placeholder_match_component:
         print('placeholder_match_component')
-        truncTeamA = int(teamAOption.split(' --- Team: ')[1])
-        truncTeamB = int(teamBOption.split(' --- Team: ')[1])
-        print('team A: ' + str(truncTeamA))
-        print('team B: ' + str(truncTeamB))
-        teams_df = df.loc[(df['u'] == truncTeamA) | (df['v'] == truncTeamB)]
-        dfGames = df.loc[(df['u'].isin([truncTeamA, truncTeamB])) & (df['v'].isin([truncTeamA, truncTeamB])) & (df['e_type'].isin([1, 2]))] # should be sorted by date
-        listGames = list(dfGames[['u', 'v', 'ts', 'gameid']].itertuples(index=False))
-        listChosenTeamMatches = ['No selection']
-        for game in listGames:
-            listChosenTeamMatches.append(game[3] + ' : ' + str(game[2]) + ' : ' + str(game[0]) + ' (H) vs ' + str(game[1]) + ' (A)')
+        textInputed = Team_A_text and Team_B_text
+        selectBoxesChosen = (teamAOption != 'No selection') and (teamBOption != 'No selection')
+        if textInputed:
+            truncTeamA = int(Team_A_text)
+            truncTeamB = int(Team_B_text)
+        elif selectBoxesChosen:
+            truncTeamA = int(teamAOption.split(' --- Team: ')[1])
+            truncTeamB = int(teamBOption.split(' --- Team: ')[1])
+        
+        if textInputed or selectBoxesChosen:
+            print('team A: ' + str(truncTeamA))
+            print('team B: ' + str(truncTeamB))
+            teams_df = df.loc[(df['u'] == truncTeamA) | (df['v'] == truncTeamB)]
+            dfGames = df.loc[(df['u'].isin([truncTeamA, truncTeamB])) & (df['v'].isin([truncTeamA, truncTeamB])) & (df['e_type'].isin([1, 2]))] # should be sorted by date
+            listGames = list(dfGames[['u', 'v', 'ts', 'gameid']].itertuples(index=False))
+            listChosenTeamMatches = ['No selection']
+            for game in listGames:
+                listChosenTeamMatches.append(game[3] + ' : ' + str(game[2]) + ' : ' + str(game[0]) + ' (H) vs ' + str(game[1]) + ' (A)')
         chosenTeamMatch = st.selectbox('(Optional) Choose a match between those teams:', options=listChosenTeamMatches, key='chosenTeamMatch')
 
     with placeholder_match_react:
