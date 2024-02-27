@@ -70,7 +70,7 @@ def test_eval(hint, model: THAN, batch_sampler, data, logger, n_nghs):
     return np.mean(val_auc), np.mean(val_ap)
 
 def train_eval(model, batch_sampler, optimizer, criterion, beta, device, data, n_nghs):
-    ap, auc, m_loss = [], [], []
+    ap, auc, acc, m_loss = [], [], [], []
     batch_sampler.reset()
     while True:
             batches, counts, classes = batch_sampler.get_batch_index()
@@ -89,6 +89,10 @@ def train_eval(model, batch_sampler, optimizer, criterion, beta, device, data, n
 
             loss.backward()
             optimizer.step()
+
+            corr = lbls[prob == torch.amax(prob, 1, keepdim=True)]
+            _acc = corr.sum() / len(corr)
+            acc.append(_acc)
             with torch.no_grad():
                 model = model.eval()
                 prob = prob.reshape(len(prob) * tiles)
@@ -98,4 +102,4 @@ def train_eval(model, batch_sampler, optimizer, criterion, beta, device, data, n
                 auc.append(_auc)
                 m_loss.append(loss.item())
             model.memory.detach_memory()
-    return auc, ap, m_loss
+    return auc, ap, acc, m_loss

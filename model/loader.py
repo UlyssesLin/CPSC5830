@@ -100,6 +100,13 @@ def load_data_with_test_events(dataset, n_dim, e_dim):
     return TemHetGraphData(g, n_feat, e_feat, desc['num_node_type'], desc['num_edge_type'], etype_ft)
     
 
+def get_time_steps(g, steps=None):
+    if not steps:
+        return g.ts_l
+    else:
+        _, bin_edges = np.histogram(g.ts_l, steps)
+        return bin_edges[1:]
+
 """ split data """
 
 def split_data_train_test(g: TemHetGraphData, test_ratio=0.2):

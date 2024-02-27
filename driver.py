@@ -86,7 +86,7 @@ class Driver():
             self.model.memory.__init_memory__()
             
             self.model.ngh_finder = self.train_ngh_finder
-            auc, ap, m_loss = train_eval(self.model, self.train_batch_sampler, self.optimizer, self.criterion, self.beta, self.device, self.train, self.n_degree)
+            auc, ap, acc, m_loss = train_eval(self.model, self.train_batch_sampler, self.optimizer, self.criterion, self.beta, self.device, self.train, self.n_degree)
 
                 # Backup memory at the end of training, so later we can restore it and use it for the
                 # validation on unseen nodes
@@ -102,7 +102,7 @@ class Driver():
             
             logger.info('epoch: {}, time: {:.1f}'.format(epoch, end_time - start_time))
             logger.info('Epoch mean loss: {}'.format(np.mean(m_loss)))
-            logger.info('train: auc: {:.4f}, ap: {:.4f}'.format(np.mean(auc), np.mean(ap)))
+            logger.info('train: auc: {:.4f}, ap: {:.4f}, acc: {:.4f}'.format(np.mean(auc), np.mean(ap), np.mean(acc)))
             logger.info('val: auc: {:.4f}, ap: {:.4f}'.format(test_auc, test_ap))
             
             if test_auc > best_auc:
