@@ -51,7 +51,7 @@ df['ts'] = pd.to_datetime(df['ts'], unit='s')
 
 
 # Create graph after getting input from Streamlit UI
-def createGraph(teamA, teamB, nodeType, findAdj, maxEventDisplay):
+def createGraph(teamA, teamB, nodeType, findAdj, maxEventDisplay, unifiedEdges):
     print('=================CREATING GRAPH=================')
     if nodeType and findAdj:
         focusNodes = [
@@ -119,12 +119,20 @@ def createGraph(teamA, teamB, nodeType, findAdj, maxEventDisplay):
         4: 10
     }
 
-    def edgeWeightMapper(type, size):
-        if type == 1 or type == 2:
-            return size * 3
+    def edgeWeightMapper(type, ts):
+        if unifiedEdges:
+            if type == 1 or type == 2:
+                return len(ts) * 3
+            elif type == 3:
+                # return 1 + (len(ts) % 2)
+                return len(ts)
+            return 1
         else:
-            return 1 + (size % 10)
-
+            if type == 1 or type == 2:
+                return ts * 3
+            else:
+                return 1 + (ts % 10)
+        
     def reformatLabel(text):
         return text.replace(' ', '\n')
 
@@ -133,6 +141,11 @@ def createGraph(teamA, teamB, nodeType, findAdj, maxEventDisplay):
             return 24 if len(text) < 20 else 20
         else:
             return 18 if len(text) < 20 else 14
+
+    def edgeTitleMaker(tsList):
+        tsList = pd.to_datetime(tsList).strftime('%h %d %Y %H:%M:%S').tolist()
+        concat = '\n'.join(str(ts) for ts in tsList)
+        return concat
 
     for focusNode in focusNodes:
         if (nodeType == 'team') or (teamA and teamB):
@@ -172,22 +185,38 @@ def createGraph(teamA, teamB, nodeType, findAdj, maxEventDisplay):
             'borderWidthSelected': 6
             }), nodesList))
         edgesWithDups = selectedTeam.groupby(selectedTeam.columns.tolist(), as_index=False).size()
-        edgesWithDupsList = list(edgesWithDups[['u', 'v', 'e_type', 'size', 'ts']].itertuples(index=False, name=None))
-        # Change arrow display direction if edge type is 3 (to show player joining team):
-        edgesWithDupsList = list(map(lambda x: (x[1] if x[2] == 3 else x[0], x[0] if x[2] == 3 else x[1], { 
-            'edge_type': x[2], 
-            'weight': edgeWeightMapper(x[2], x[3]),
-            'label': edgeLabelMapper[x[2]],
-            'title': str(pd.to_datetime(str(x[4])).strftime('%h %d %Y %H:%M:%S')),
-            'color': edgeColorMapper[x[2]],
-            'font': {'size': edgeFontSizeMapper[x[2]]},
-            'smooth': True,
-            # 'arrowSize': 5,
-            # 'physics': False
-            }), edgesWithDupsList))
+        if unifiedEdges:
+            edgesNoDupsDF = edgesWithDups.groupby(['u', 'v', 'e_type'])
+            edgesNoDupsList = []
+            for ed, group in edgesNoDupsDF:
+                edgesNoDupsList.append(ed + (group['ts'].tolist(),))
+            edgesNoDupsList = list(map(lambda x: (int(x[1] if x[2] == 3 else x[0]), int(x[0] if x[2] == 3 else x[1]), { 
+                'edge_type': int(x[2]), 
+                'weight': edgeWeightMapper(x[2], x[3]),
+                'label': edgeLabelMapper[x[2]],
+                'title': edgeTitleMaker(x[3]),
+                'color': edgeColorMapper[x[2]],
+                'font': {'size': edgeFontSizeMapper[x[2]]},
+                'smooth': 0,
+                # 'arrowSize': 5,
+                # 'physics': False
+                }), edgesNoDupsList))
+        else:
+            edgesWithDupsList = list(edgesWithDups[['u', 'v', 'e_type', 'size', 'ts']].itertuples(index=False, name=None))
+            # Change arrow display direction if edge type is 3 (to show player joining team):
+            edgesWithDupsList = list(map(lambda x: (x[1] if x[2] == 3 else x[0], x[0] if x[2] == 3 else x[1], { 
+                'edge_type': x[2], 
+                'weight': edgeWeightMapper(x[2], x[3]),
+                'label': edgeLabelMapper[x[2]],
+                'title': str(pd.to_datetime(str(x[4])).strftime('%h %d %Y %H:%M:%S')),
+                'color': edgeColorMapper[x[2]],
+                'font': {'size': edgeFontSizeMapper[x[2]]},
+                'smooth': True,
+                # 'arrowSize': 5,
+                # 'physics': False
+                }), edgesWithDupsList))
         focusNode['nodeList'] = nodesList
-        focusNode['edgeList'] = edgesWithDupsList
-
+        focusNode['edgeList'] = edgesNoDupsList if unifiedEdges else edgesWithDupsList
         focusGraph = nx.MultiDiGraph()
 
         lineWidthMapper = {
@@ -245,6 +274,17 @@ def createGraph(teamA, teamB, nodeType, findAdj, maxEventDisplay):
                 'arrowStrikethrough': False
             }
         }
+        if unifiedEdges:
+            options['physics'] = { # physics should be added with 'player' otherwise there is not enough edge length
+                'barnesHut':{
+                    'gravitationalConstant': -15000, # seemingly best around -15000
+                    'centralGravity': 5, # seemingly best at 5
+                    'springLength': 250 if (teamA and teamB) else 400 if nodeType == 'team' else 600,
+                    'springConstant': 0.7,
+                    'damping': 3,
+                    'avoidOverlap': 0 # higher vals push nodes away from each other actively
+                }
+            }
         if nodeType == 'player':
             options['physics'] = { # physics should be added with 'player' otherwise there is not enough edge length
                 'barnesHut':{
@@ -335,6 +375,8 @@ if mainOption == 'With 2 teams':
             time_X_text = st.text_input('Start:')
         with time_Y_text_col:
             time_Y_text = st.text_input('End:')
+        placeholder_unified_edges_component = st.empty()
+        placeholder_unified_edges_react = st.empty()
 
         teamAOption=''
         teamBOption=''
@@ -342,6 +384,7 @@ if mainOption == 'With 2 teams':
         truncTeamB=''
         chosenTeamMatch=''
         listChosenTeamMatches = ['No selection']
+        unifiedEdges = False
         
         submit_button = st.form_submit_button(label='Submit')
 
@@ -396,6 +439,12 @@ if mainOption == 'With 2 teams':
         if chosenTeamMatch == 'No selection':
             print('No selection')
 
+    with placeholder_unified_edges_component:
+        unifiedEdges = st.toggle('Show unified edges', key='toggle1')
+
+    with placeholder_unified_edges_react:
+        print('Unified edges toggled')
+
     # with st.sidebar:
     if submit_button:
         if truncTeamA and truncTeamB:
@@ -416,7 +465,7 @@ if mainOption == 'With 2 teams':
                 df = df.loc[(df['ts'] >= time_X_text) & (df['ts'] <= time_Y_text)]
                 print('SELECTING TIME WINDOW BETWEEN ' + str(time_X_text) + ' AND ' + str(time_Y_text))
 
-            createGraph(truncTeamA, truncTeamB, None, None, MAX_EVENTS_TEAMS)
+            createGraph(truncTeamA, truncTeamB, None, None, MAX_EVENTS_TEAMS, unifiedEdges)
             df = dfOriginal # reset - after submit and show graph
             renderGraph()
         else:
@@ -435,11 +484,14 @@ if mainOption == 'Node adjacency':
         st.subheader('Then choose a node:')
         placeholder_node_list_component = st.empty()
         adjNodeText = st.text_input('Or, input a node number (after choosing a type):')
+        placeholder_unified_edges_component = st.empty()
+        placeholder_unified_edges_react = st.empty()
 
         submit_button = st.form_submit_button(label='Submit')
 
         nodesList = ['No selection']
         adjNode = ''
+        unifiedEdges = False
         
     with placeholder_node_typ_component:
         adjNodeType = st.selectbox('Select one:', ['Team', 'Player'], key='adjtype')
@@ -458,6 +510,12 @@ if mainOption == 'Node adjacency':
     with placeholder_node_list_component:
         adjNodeSelection = st.selectbox('Select a node:', nodesList, key='adjlist')
 
+    with placeholder_unified_edges_component:
+        unifiedEdges = st.toggle('Show unified edges', key='toggle2')
+
+    with placeholder_unified_edges_react:
+        print('Unified edges toggled')
+
     if submit_button:
         if adjNodeText:
             adjNode = int(adjNodeText)
@@ -468,7 +526,7 @@ if mainOption == 'Node adjacency':
             print('--------------USER SUBMITTED NODE ADJACENCY FORM--------------')
             # dfOriginal = df
             print('<' + adjNodeType + '> type node, number: ' + str(adjNode))
-            createGraph(None, None, adjNodeType, adjNode, MAX_EVENTS_ADJ)
+            createGraph(None, None, adjNodeType, adjNode, MAX_EVENTS_ADJ, unifiedEdges)
             # df = dfOriginal # reset - after submit and show graph
             renderGraph()
         else:
