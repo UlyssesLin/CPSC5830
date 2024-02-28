@@ -44,7 +44,7 @@ class MiniBatchSampler(object):
             counts[i] = len(batch[mask])
 
         self.cur_batch += 1
-        print(f"{self.hint} batch {self.cur_batch}/{self.num_batch}\t\r", end='')
+        #print(f"{self.hint} batch {self.cur_batch}/{self.num_batch}\t\r", end='')
         return batches, counts, self.classes
 
     def reset(self):
@@ -99,6 +99,13 @@ def load_data_with_test_events(dataset, n_dim, e_dim):
     g = g_train._append(g_test).sort_values(by="ts").reset_index(drop=True)
     return TemHetGraphData(g, n_feat, e_feat, desc['num_node_type'], desc['num_edge_type'], etype_ft)
     
+
+def get_time_steps(g, steps=None):
+    if not steps:
+        return g.ts_l
+    else:
+        _, bin_edges = np.histogram(g.ts_l, steps)
+        return bin_edges[1:]
 
 """ split data """
 
