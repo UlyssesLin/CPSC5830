@@ -8,6 +8,7 @@ import model.loader as loader
 
 from model.module import THAN
 from model.loader import MiniBatchSampler
+from tqdm import tqdm
 
 from model.evaluate import train_eval, test_eval
 
@@ -15,7 +16,7 @@ class Driver():
     def __init__(self, g, g_val, train, val, test, p_classes, train_ngh_finder,
                  val_ngh_finder, test_ngh_finder, train_batch_sampler,
                  val_batch_sampler, test_batch_sampler, device, t_dim,
-                 n_layer, n_head, dropout, n_degree, beta, path, logger):
+                 n_layer, n_head, dropout, n_degree, beta, learning_rate, path, logger):
         '''
         Initializes model and holds all objects needed to train and test model
 
@@ -66,8 +67,8 @@ class Driver():
                           self.g.num_e_type, t_dim,
                           n_layer, n_head,
                           dropout, self.device)
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=args.lr)
-        self.criterion = torch.nn.BCELoss()
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+        self.criterion = torch.nn.CrossEntropyLoss()
         
         self.n_degree = n_degree
         self.beta = beta
@@ -77,11 +78,14 @@ class Driver():
         self.model = self.model.to(device)
 
     def eval_epochs(self, epochs):
-        best_auc, best_ap = 0., 0.
-        for epoch in range(epochs):
+        best_auc, best_ap, best_acc = 0., 0., 0.
+        train_acc_l, test_acc_l, loss_l = [], [], []
+
+        for epoch in tqdm(range(epochs)):
             # training use only training graph
             start_time = time.time()
-            logger.info('start {} epoch'.format(epoch))
+            if self.logger:
+                self.logger.info('start {} epoch'.format(epoch))
             # Reinitialize memory of the model at the start of each epoch
             self.model.memory.__init_memory__()
             
@@ -94,21 +98,26 @@ class Driver():
             
             # validation phase use all information
             self.model.ngh_finder = self.val_ngh_finder
-            test_auc, test_ap = test_eval('val', self.model, self.val_batch_sampler, self.val, self.logger, self.n_degree)
+            test_auc, test_ap, test_acc = test_eval('val', self.model, self.val_batch_sampler, self.device, self.val, self.logger, self.n_degree)
             
             self.model.memory.restore_memory(train_memory_backup)
             
             end_time = time.time()
+
+            train_acc_l.append(np.mean(acc))
+            test_acc_l.append(test_acc)
+            loss_l.append(np.mean(m_loss))
             
-            logger.info('epoch: {}, time: {:.1f}'.format(epoch, end_time - start_time))
-            logger.info('Epoch mean loss: {}'.format(np.mean(m_loss)))
-            logger.info('train: auc: {:.4f}, ap: {:.4f}, acc: {:.4f}'.format(np.mean(auc), np.mean(ap), np.mean(acc)))
-            logger.info('val: auc: {:.4f}, ap: {:.4f}'.format(test_auc, test_ap))
+            if self.logger:
+                self.logger.info('epoch: {}, time: {:.1f}'.format(epoch, end_time - start_time))
+                self.logger.info('Epoch mean loss: {}'.format(np.mean(m_loss)))
+                self.logger.info('train: auc: {:.4f}, ap: {:.4f}, acc: {:.4f}'.format(np.mean(auc), np.mean(ap), np.mean(acc)))
+                self.logger.info('val: auc: {:.4f}, ap: {:.4f}, acc: {:.4f}'.format(test_auc, test_ap, test_acc))
             
-            if test_auc > best_auc:
-                best_auc, best_ap = test_auc, test_ap
+            if test_acc > best_acc:
+                best_auc, best_ap, best_acc = test_auc, test_ap, test_acc
                 torch.save(self.model.state_dict(), self.path)
-        return best_auc, best_ap
+        return best_auc, best_ap, best_acc, train_acc_l, test_acc_l, loss_l
     
     
 
@@ -146,24 +155,25 @@ if __name__ == '__main__':
                     val_ngh_finder, test_ngh_finder, train_batch_sampler,
                     val_batch_sampler, test_batch_sampler, device, args.t_dim,
                     args.n_layer, args.n_head, args.dropout, args.n_degree,
-                    args.beta, MODEL_SAVE_PATH, logger)
+                    args.beta, args.lr, MODEL_SAVE_PATH, logger)
 
-    auc_l, ap_l = [], []
+    auc_l, ap_l, acc_l = [], [], []
     for i in range(args.n_runs):
         logger.info(f"【START】run num: {i}")
         
         epoch_times = []
-        best_auc, best_ap = driver.eval_epochs(args.n_epoch)
+        best_auc, best_ap, best_acc, _, _, _ = driver.eval_epochs(args.n_epoch)
 
-        logger.info('Val Best: auc: {:.4f}, ap: {:.4f}\n\n'.format(best_auc, best_ap))
+        logger.info('Val Best: auc: {:.4f}, ap: {:.4f}, acc: {:.4f}\n\n'.format(best_auc, best_ap, best_acc))
 
         auc_l.append(best_auc)
         ap_l.append(best_ap)
+        acc_l.append(best_acc)
 
         # save epoch times
         with open(f"epoch_time/{args.prefix}_{args.data}_layer{args.n_layer}.txt", 'a', encoding='utf-8') as f:
             f.write(",".join(map(lambda x: format(x, ".1f"), epoch_times)))
             f.write("\n")
 
-    logger.info("Final result: \nauc: {:.2f}({:.2f}), ap: {:.2f}({:.2f})".format(
-        np.mean(auc_l)*100, np.std(auc_l)*100, np.mean(ap_l)*100, np.std(ap_l)*100))
+    logger.info("Final result: \nauc: {:.2f}({:.2f}), ap: {:.2f}({:.2f}), acc: {:.2f}({:.2f})".format(
+        np.mean(auc_l)*100, np.std(auc_l)*100, np.mean(ap_l)*100, np.std(ap_l)*100, np.mean(acc_l)*100, np.std(acc_l)*100))

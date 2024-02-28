@@ -44,7 +44,7 @@ class MiniBatchSampler(object):
             counts[i] = len(batch[mask])
 
         self.cur_batch += 1
-        print(f"{self.hint} batch {self.cur_batch}/{self.num_batch}\t\r", end='')
+        #print(f"{self.hint} batch {self.cur_batch}/{self.num_batch}\t\r", end='')
         return batches, counts, self.classes
 
     def reset(self):

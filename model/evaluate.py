@@ -49,9 +49,10 @@ def _eval_loop(model, batches, counts, classes, data, n_nghs):
     return prob, lbls, tiles
 
 
-def test_eval(hint, model: THAN, batch_sampler, data, logger, n_nghs):
-    logger.info(hint)
-    val_ap, val_auc = [], []
+def test_eval(hint, model: THAN, batch_sampler, device, data, logger, n_nghs):
+    if logger:
+        logger.info(hint)
+    test_ap, test_auc, test_acc = [], [], []
     with torch.no_grad():
         model = model.eval()
         batch_sampler.reset()
@@ -60,14 +61,21 @@ def test_eval(hint, model: THAN, batch_sampler, data, logger, n_nghs):
             if counts is None or counts.sum()==0:
                 break
             prob, lbls, tiles = _eval_loop(model, batches, counts, classes, data, n_nghs)
+
+            lbl = torch.from_numpy(lbls).type(torch.float).to(device)
+
+            corr = lbl[prob == torch.amax(prob, 1, keepdim=True)]
+            _acc = corr.sum() / len(corr)
+            test_acc.append(_acc.cpu())
+
             prob = prob.reshape(len(prob) * tiles)
             lbls = lbls.reshape(len(lbls) * tiles)
 
             ap, auc = evaluate_score(lbls, prob)
-            val_ap.append(ap)
-            val_auc.append(auc)
+            test_ap.append(ap)
+            test_auc.append(auc)
 
-    return np.mean(val_auc), np.mean(val_ap)
+    return np.mean(test_auc), np.mean(test_ap), np.mean(test_acc)
 
 def train_eval(model, batch_sampler, optimizer, criterion, beta, device, data, n_nghs):
     ap, auc, acc, m_loss = [], [], [], []
@@ -90,9 +98,9 @@ def train_eval(model, batch_sampler, optimizer, criterion, beta, device, data, n
             loss.backward()
             optimizer.step()
 
-            corr = lbls[prob == torch.amax(prob, 1, keepdim=True)]
+            corr = lbl[prob == torch.amax(prob, 1, keepdim=True)]
             _acc = corr.sum() / len(corr)
-            acc.append(_acc)
+            acc.append(_acc.cpu())
             with torch.no_grad():
                 model = model.eval()
                 prob = prob.reshape(len(prob) * tiles)

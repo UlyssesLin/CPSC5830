@@ -135,5 +135,6 @@ desc = {
         "num_edge_type": NUM_E_TYPE,
         "classes": CLASSES
     }
+
 with open(OUT_DESC, 'w') as f:
     json.dump(desc, f, indent=4)
