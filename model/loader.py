@@ -68,7 +68,7 @@ def _load_base(dataset: str, n_dim=None, e_dim=None):
     # edge_feat
     if os.path.exists(f'./data/processed/{dataset}/edge_ft.npy'):
         # e_feat = np.load(f'./data/processed/{dataset}/edge_ft.npy')[:,:32]
-        e_feat = np.load(f'./data/processed/{dataset}/edge_ft.npy')
+        e_feat = np.load(f'./data/processed/{dataset}/edge_ft.npy', allow_pickle=True)
     elif os.path.exists(f'./data/processed/{dataset}/edge_ft.csv'):
         e_feat = pd.read_csv(f'./data/processed/{dataset}/edge_ft.csv', header=None, index_col=[0])
     elif dataset.startswith("wsdm"):
