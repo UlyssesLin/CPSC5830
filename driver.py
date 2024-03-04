@@ -10,7 +10,7 @@ from model.module import THAN
 from model.loader import MiniBatchSampler
 from tqdm import tqdm
 
-from model.evaluate import train_eval, test_eval
+from model.evaluate import train_eval, test_eval, train, test
 
 class Driver():
     def __init__(self, g, g_val, train, val, test, p_classes, train_ngh_finder,
@@ -69,6 +69,12 @@ class Driver():
                           dropout, self.device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
         self.criterion = torch.nn.CrossEntropyLoss()
+
+        self.t_dim = t_dim
+        self.n_layer = n_layer
+        self.n_head = n_head
+        self.dropout = dropout
+        self.learning_rate = learning_rate
         
         self.n_degree = n_degree
         self.beta = beta
@@ -76,6 +82,16 @@ class Driver():
         self.path = path
         self.logger = logger
         self.model = self.model.to(device)
+
+    def reset_model(self):
+        self.model = THAN(self.train_ngh_finder, self.g.n_feat, self.g.e_feat,
+                          self.g.e_type_feat, self.g.num_n_type,
+                          self.g.num_e_type, self.t_dim,
+                          self.n_layer, self.n_head,
+                          self.dropout, self.device)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        self.criterion = torch.nn.CrossEntropyLoss()
+        self.model = self.model.to(self.device)
 
     def eval_epochs(self, epochs):
         best_auc, best_ap, best_acc = 0., 0., 0.
@@ -119,7 +135,42 @@ class Driver():
                 torch.save(self.model.state_dict(), self.path)
         return best_auc, best_ap, best_acc, train_acc_l, test_acc_l, loss_l
     
+    def train_window(self, epochs):
+        train_acc_l, loss_l = [], []
+
+        for epoch in tqdm(range(epochs)):
+            # training use only training graph
+            start_time = time.time()
+            if self.logger:
+                self.logger.info('start {} epoch'.format(epoch))
+            # Reinitialize memory of the model at the start of each epoch
+            self.model.memory.__init_memory__()
+            
+            self.model.ngh_finder = self.train_ngh_finder
+            acc = train(self.model, self.train_batch_sampler, self.optimizer, self.criterion, self.beta, self.device, self.train, self.n_degree)
+
+            memory_backup = self.model.memory.backup_memory()
+            
+            end_time = time.time()
+
+            train_acc_l.append(np.mean(acc))
+            
+            if self.logger:
+                self.logger.info('epoch: {}, time: {:.1f}'.format(epoch, end_time - start_time))
+                self.logger.info('train: acc: {:.4f}'.format(np.mean(acc)))
+
+        torch.save(self.model.state_dict(), self.path)
+        return train_acc_l, loss_l, memory_backup
     
+    def test_window(self, memory_backup):
+            
+        # validation phase use all information
+        self.model.ngh_finder = self.val_ngh_finder
+        test_acc, corr = test(self.model, self.test_batch_sampler, self.device, self.test, self.n_degree)
+        
+        self.model.memory.restore_memory(memory_backup)
+    
+        return test_acc, corr
 
 if __name__ == '__main__':
     args = utils.get_args()
@@ -135,23 +186,23 @@ if __name__ == '__main__':
 
 
     # load data and split into train val test
-    g, g_val, train, val, test, p_classes = loader.load_and_split_data_train_test_val(args.data, args.n_dim, args.e_dim)
+    g, g_val, g_train, val, g_test, p_classes = loader.load_and_split_data_train_test_val(args.data, args.n_dim, args.e_dim, args.val, args.test)
 
     ### Initialize the data structure for graph and edge sampling
-    train_ngh_finder = loader.get_neighbor_finder(train, g.max_idx, args.uniform, num_edge_type=g.num_e_type)
+    train_ngh_finder = loader.get_neighbor_finder(g_train, g.max_idx, args.uniform, num_edge_type=g.num_e_type)
     val_ngh_finder = loader.get_neighbor_finder(g_val, g.max_idx, args.uniform, num_edge_type=g.num_e_type)
     test_ngh_finder = loader.get_neighbor_finder(g, g.max_idx, args.uniform,
                                                     g.num_e_type)
     # mini-batch idx sampler
-    train_batch_sampler = MiniBatchSampler(train.e_type_l, args.bs, 'train', p_classes)
+    train_batch_sampler = MiniBatchSampler(g_train.e_type_l, args.bs, 'train', p_classes)
     val_batch_sampler = MiniBatchSampler(val.e_type_l, args.bs, 'val', p_classes)
-    test_batch_sampler = MiniBatchSampler(test.e_type_l, args.bs, 'test',
+    test_batch_sampler = MiniBatchSampler(g_test.e_type_l, args.bs, 'test',
                                             p_classes)
 
 
     device = torch.device('cuda:{}'.format(args.gpu)) if args.gpu != -1 else 'cpu'
 
-    driver = Driver(g, g_val, train, val, test, p_classes, train_ngh_finder,
+    driver = Driver(g, g_val, g_train, val, g_test, p_classes, train_ngh_finder,
                     val_ngh_finder, test_ngh_finder, train_batch_sampler,
                     val_batch_sampler, test_batch_sampler, device, args.t_dim,
                     args.n_layer, args.n_head, args.dropout, args.n_degree,
@@ -174,6 +225,8 @@ if __name__ == '__main__':
         with open(f"epoch_time/{args.prefix}_{args.data}_layer{args.n_layer}.txt", 'a', encoding='utf-8') as f:
             f.write(",".join(map(lambda x: format(x, ".1f"), epoch_times)))
             f.write("\n")
+
+        driver.reset_model()
 
     logger.info("Final result: \nauc: {:.2f}({:.2f}), ap: {:.2f}({:.2f}), acc: {:.2f}({:.2f})".format(
         np.mean(auc_l)*100, np.std(auc_l)*100, np.mean(ap_l)*100, np.std(ap_l)*100, np.mean(acc_l)*100, np.std(acc_l)*100))
