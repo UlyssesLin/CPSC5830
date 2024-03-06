@@ -1,0 +1,10 @@
+{
+    "num_node": 6956,
+    "num_edge": 590853,
+    "num_node_type": 3,
+    "num_edge_type": 4,
+    "classes": [
+        1,
+        2
+    ]
+}

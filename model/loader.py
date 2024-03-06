@@ -44,7 +44,7 @@ class MiniBatchSampler(object):
             counts[i] = len(batch[mask])
 
         self.cur_batch += 1
-        #print(f"{self.hint} batch {self.cur_batch}/{self.num_batch}\t\r", end='')
+        print(f"{self.hint} batch {self.cur_batch}/{self.num_batch}\t\r", end='')
         return batches, counts, self.classes
 
     def reset(self):
@@ -100,14 +100,24 @@ def load_data_with_test_events(dataset, n_dim, e_dim):
     return TemHetGraphData(g, n_feat, e_feat, desc['num_node_type'], desc['num_edge_type'], etype_ft)
     
 
-def get_time_steps(g, steps=None):
+def get_time_steps(g, p_classes, steps=None):
+    match_mask = np.isin(g.e_type_l, p_classes)
+    matches = g.sample_by_mask(match_mask)
     if not steps:
-        return g.ts_l
+        return sorted(np.unique(matches.ts_l))
     else:
-        _, bin_edges = np.histogram(g.ts_l, steps)
-        return bin_edges[1:]
+        _, bin_edges = np.histogram(matches.ts_l, steps)
+        return bin_edges
 
 """ split data """
+
+def split_data_window(g, train_cutoff, test_cutoff):
+    valid_train_flag = g.ts_l <= train_cutoff
+    train = g.sample_by_mask(valid_train_flag)
+    valid_test_flag = (train_cutoff < g.ts_l) & (g.ts_l <= test_cutoff)
+    test = g.sample_by_mask(valid_test_flag)
+
+    return train, test
 
 def split_data_train_test(g: TemHetGraphData, test_ratio=0.2):
     test_time = np.quantile(g.ts_l, 1. - test_ratio)
@@ -124,7 +134,7 @@ def split_data_train_test(g: TemHetGraphData, test_ratio=0.2):
 
 def split_data_train_test_val(g: TemHetGraphData, val_ratio=0.25, test_ratio=0.25):
     val_time = np.quantile(g.ts_l, 1. - (test_ratio + val_ratio))
-    test_time = np.quantile(g.ts_l, 1. - val_ratio)
+    test_time = np.quantile(g.ts_l, 1. - test_ratio)
 
     ''' train '''
     valid_train_flag = g.ts_l < val_time
@@ -134,7 +144,7 @@ def split_data_train_test_val(g: TemHetGraphData, val_ratio=0.25, test_ratio=0.2
     valid_val_flag = (test_time > g.ts_l) & (g.ts_l >= val_time)  # total test edges
     val = g.sample_by_mask(valid_val_flag)
 
-    ''' val '''
+    ''' test '''
     valid_test_flag = g.ts_l >= test_time  # total val edges
     test = g.sample_by_mask(valid_test_flag)
 

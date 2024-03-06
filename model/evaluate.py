@@ -81,33 +81,81 @@ def train_eval(model, batch_sampler, optimizer, criterion, beta, device, data, n
     ap, auc, acc, m_loss = [], [], [], []
     batch_sampler.reset()
     while True:
+        batches, counts, classes = batch_sampler.get_batch_index()
+        if counts is None or counts.sum()==0:
+            break
+        prob, lbls, tiles = _eval_loop(model, batches, counts, classes, data, n_nghs)
+
+        with torch.no_grad():
+            lbl = torch.from_numpy(lbls).type(torch.float).to(device)
+
+        optimizer.zero_grad()
+        model = model.train()
+
+        loss = criterion(prob, lbl)
+        loss += beta * model.affinity_score.reg_loss()
+
+        loss.backward()
+        optimizer.step()
+
+        corr = lbl[prob == torch.amax(prob, 1, keepdim=True)]
+        _acc = corr.sum() / len(corr)
+        acc.append(_acc.cpu())
+        with torch.no_grad():
+            model = model.eval()
+            prob = prob.reshape(len(prob) * tiles)
+            lbls = lbls.reshape(len(lbls) * tiles)
+            _ap, _auc = evaluate_score(lbls, prob)
+            ap.append(_ap)
+            auc.append(_auc)
+            m_loss.append(loss.item())
+        model.memory.detach_memory()
+    return auc, ap, acc, m_loss
+
+def train(model, batch_sampler, optimizer, criterion, beta, device, data, n_nghs):
+    acc = []
+    batch_sampler.reset()
+    while True:
+        batches, counts, classes = batch_sampler.get_batch_index()
+        if counts is None or counts.sum()==0:
+            break
+        prob, lbls, _ = _eval_loop(model, batches, counts, classes, data, n_nghs)
+
+        with torch.no_grad():
+            lbl = torch.from_numpy(lbls).type(torch.float).to(device)
+
+        optimizer.zero_grad()
+        model = model.train()
+
+        loss = criterion(prob, lbl)
+        loss += beta * model.affinity_score.reg_loss()
+
+        loss.backward()
+        optimizer.step()
+
+        corr = lbl[prob == torch.amax(prob, 1, keepdim=True)]
+        _acc = corr.sum() / len(corr)
+        acc.append(_acc.cpu())
+        model.memory.detach_memory()
+    return acc
+
+def test(model: THAN, batch_sampler, device, data, n_nghs):
+    test_acc, corr = [], []
+    with torch.no_grad():
+        model = model.eval()
+        batch_sampler.reset()
+        while True:
             batches, counts, classes = batch_sampler.get_batch_index()
             if counts is None or counts.sum()==0:
                 break
             prob, lbls, tiles = _eval_loop(model, batches, counts, classes, data, n_nghs)
 
-            with torch.no_grad():
-                lbl = torch.from_numpy(lbls).type(torch.float).to(device)
+            lbl = torch.from_numpy(lbls).type(torch.float).to(device)
 
-            optimizer.zero_grad()
-            model = model.train()
+            _corr = lbl[prob == torch.amax(prob, 1, keepdim=True)]
+            _acc = _corr.sum() / len(_corr)
+            test_acc.append(_acc.cpu())
 
-            loss = criterion(prob, lbl)
-            loss += beta * model.affinity_score.reg_loss()
+            corr.extend(_corr)
 
-            loss.backward()
-            optimizer.step()
-
-            corr = lbl[prob == torch.amax(prob, 1, keepdim=True)]
-            _acc = corr.sum() / len(corr)
-            acc.append(_acc.cpu())
-            with torch.no_grad():
-                model = model.eval()
-                prob = prob.reshape(len(prob) * tiles)
-                lbls = lbls.reshape(len(lbls) * tiles)
-                _ap, _auc = evaluate_score(lbls, prob)
-                ap.append(_ap)
-                auc.append(_auc)
-                m_loss.append(loss.item())
-            model.memory.detach_memory()
-    return auc, ap, acc, m_loss
+    return np.mean(test_acc), corr
